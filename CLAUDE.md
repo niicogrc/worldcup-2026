@@ -292,3 +292,88 @@ Realizar consultas con select restringido (como `.select('kickoff_at')`) o invoc
 ### 4. Literales en Framer Motion
 Los objetos de variantes de Framer Motion infieren strings generales para las propiedades de transición (e.g. `type: 'spring'`). El compilador de TypeScript rechaza esto, exigiendo tipos literales.
 * **Solución:** Definir los objetos de animación con la directiva `as const` o type cast específico (`'spring' as const`).
+
+### 5. PowerShell y curl
+En PowerShell de Windows, `curl` es un alias de `Invoke-WebRequest`, no el `curl` de Linux. Usar:
+```powershell
+Invoke-WebRequest -Method POST -Uri http://localhost:3000/api/seed
+```
+
+### 6. Seed requiere env vars
+El endpoint `/api/seed` valida `CRON_SECRET` y `API_FOOTBALL_KEY` antes de ejecutar. Sin ellas da 500.
+
+---
+
+## Next Steps (TODO)
+
+### 🔴 Bloqueantes — hacer antes de que funcione la app
+
+#### 1. Configurar Google OAuth
+1. Ir a [Google Cloud Console → Credenciales](https://console.cloud.google.com/apis/credentials)
+2. Crear un proyecto (ej. `porra-mundial-2026`) si no existe
+3. Ir a "Pantalla de consentimiento de OAuth" → Externo → rellenar datos mínimos
+4. Crear "ID de cliente de OAuth" → Aplicación Web
+5. En **URIs de redireccionamiento autorizados** poner:
+   ```
+   https://cnkkfxlswmagruahulfn.supabase.co/auth/v1/callback
+   ```
+6. Copiar **Client ID** y **Client Secret**
+7. Ir a [Supabase Auth Providers](https://supabase.com/dashboard/project/cnkkfxlswmagruahulfn/auth/providers) → Google → Enable → pegar las credenciales → Save
+
+#### 2. Configurar variables de entorno que faltan
+Añadir al `.env.local`:
+```env
+# Generar un string aleatorio (ej. con openssl rand -hex 32)
+CRON_SECRET=<un-string-aleatorio-largo>
+
+# Obtener en https://dashboard.api-football.com/ (free tier = 100 req/día)
+API_FOOTBALL_KEY=<tu-api-key>
+
+# Obtener en Supabase Dashboard → Settings → API → service_role key
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+```
+
+#### 3. Ejecutar el seed (con npm run dev corriendo)
+```powershell
+# PowerShell (Windows)
+Invoke-WebRequest -Method POST -Uri http://localhost:3000/api/seed -Headers @{Authorization="Bearer TU_CRON_SECRET"}
+
+# O usando curl real (Git Bash / WSL / Mac / Linux)
+curl -X POST http://localhost:3000/api/seed -H "Authorization: Bearer TU_CRON_SECRET"
+```
+
+### 🟡 Pendientes del proyecto
+
+#### 4. Unificar imports del cliente Supabase
+`navigation.tsx` todavía importa de `@/lib/supabase/client`. Decidir si usar `lib/` o `utils/` como ubicación canónica y unificar.
+
+#### 5. Panel admin
+Vista para:
+- Ver y gestionar usuarios (cambiar roles)
+- Ver `sync_logs` (historial de sincronizaciones)
+- Forzar recálculo de puntos manualmente
+- Marcar la Bota de Oro como acertada/fallida
+
+#### 6. Deploy en Vercel
+1. Conectar repo en [vercel.com](https://vercel.com)
+2. Configurar todas las env vars (URL, keys, CRON_SECRET)
+3. Crear `vercel.json` con el cron:
+   ```json
+   {
+     "crons": [
+       {
+         "path": "/api/sync-matches",
+         "schedule": "5 * * * *"
+       }
+     ]
+   }
+   ```
+4. Deploy y verificar que el cron sincroniza resultados
+
+### 🟢 Mejoras opcionales
+
+- [ ] Manejo de errores visual cuando las tablas no existen (fallback UI en vez de pantalla vacía)
+- [ ] Página de perfil de usuario (editar display_name, ver historial de predicciones)
+- [ ] Notificaciones push cuando un partido termine y se asignen puntos
+- [ ] Vista comparativa entre dos usuarios (head-to-head)
+- [ ] Modo oscuro/claro toggle (actualmente solo dark)
