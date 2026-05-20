@@ -262,13 +262,33 @@ Sedes:       16 estadios en USA, México y Canadá (UTC-4 a UTC-7)
 - [x] Reglas de la porra definidas
 - [x] Stack decidido
 - [x] Schema SQL completo (con triggers, RLS, vistas)
-- [ ] Estructura Next.js
-- [ ] Módulo API-Football (sync)
-- [ ] Seed script (openfootball)
-- [ ] Auth (OAuth Google/GitHub)
-- [ ] UI Porra 1 — grupos
-- [ ] UI Porra 2 — playoffs / bracket
-- [ ] UI Bota de Oro
-- [ ] Leaderboard en tiempo real
+- [x] Estructura Next.js
+- [x] Módulo API-Football (sync)
+- [x] Seed script (openfootball)
+- [x] Auth (OAuth Google/GitHub)
+- [x] UI Porra 1 — grupos
+- [x] UI Porra 2 — playoffs / bracket
+- [x] UI Bota de Oro
+- [x] Leaderboard en tiempo real
 - [ ] Panel admin
 - [ ] Deploy en Vercel
+
+---
+
+## Aprendizajes (Learnings & Gotchas)
+
+### 1. Prerenderizado en Next.js 15 y Supabase SSR
+Durante la compilación (`next build`), Next.js intenta prerenderizar las páginas estáticas (como `/login`). Si el cliente de Supabase se inicializa en el cuerpo del componente leyendo `process.env.NEXT_PUBLIC_SUPABASE_URL` y este no está presente en el entorno de compilación, arrojará un error fatal.
+* **Solución:** Proveer URLs y claves placeholder seguras (e.g., `'https://placeholder.supabase.co'`) como fallback para evitar caídas durante el prerenderizado.
+
+### 2. Dependencias de `@g-loot/react-tournament-brackets`
+El componente de brackets requiere de dependencias adicionales no declaradas explícitamente en su instalación inicial.
+* **Solución:** Instalar manualmente `styled-components` y `react-svg-pan-zoom` utilizando `--legacy-peer-deps`.
+
+### 3. Inferencia de Tipos de Supabase (TypeScript)
+Realizar consultas con select restringido (como `.select('kickoff_at')`) o invocar `.single()` en consultas específicas puede hacer que el compilador de TypeScript reduzca el tipo del resultado a `never` o `never[]`.
+* **Solución:** Utilizar `.select('*')`, `.maybeSingle()` para mayor tolerancia a filas nulas, y realizar casts explícitos a `any` en las propiedades afectadas.
+
+### 4. Literales en Framer Motion
+Los objetos de variantes de Framer Motion infieren strings generales para las propiedades de transición (e.g. `type: 'spring'`). El compilador de TypeScript rechaza esto, exigiendo tipos literales.
+* **Solución:** Definir los objetos de animación con la directiva `as const` o type cast específico (`'spring' as const`).
