@@ -75,143 +75,215 @@ Empieza cuando acaban los grupos y se conocen los 32 clasificados a dieciseisavo
 | Capa            | Tecnología                          |
 |-----------------|-------------------------------------|
 | Frontend        | Next.js 15 (App Router) + TypeScript |
-| Estilos         | Tailwind CSS                        |
+| Estilos         | Tailwind CSS v4                     |
+| Tipografías     | Bebas Neue + Oswald + Inter         |
+| Animaciones     | Framer Motion                       |
 | Backend / DB    | Supabase (Postgres + Auth + Realtime)|
 | Autenticación   | Supabase Auth — OAuth Google/GitHub  |
 | API de datos    | API-Football (`api-sports.io`)       |
-| Datos estáticos | openfootball/worldcup.json (seed)    |
+| Brackets        | @g-loot/react-tournament-brackets   |
 | Deploy          | Vercel (frontend + cron jobs)        |
 
 ---
 
-## Estructura del proyecto
+## Estructura del proyecto (real)
 
 ```
 worldcup-2026/
 ├── app/
+│   ├── layout.tsx                     # Root layout (fuentes, metadata)
+│   ├── page.tsx                       # Landing / redirect
+│   ├── globals.css                    # Sistema de diseño (glassmorphism, glow, etc.)
 │   ├── (auth)/
-│   │   └── login/                  # Página de login OAuth
+│   │   └── login/
+│   │       └── page.tsx               # Login OAuth (Google/GitHub) con Framer Motion
 │   ├── (app)/
-│   │   ├── layout.tsx              # Layout autenticado
-│   │   ├── dashboard/              # Ranking general
-│   │   ├── grupos/                 # 72 partidos fase grupos
-│   │   │   └── [matchId]/          # Detalle de partido
-│   │   ├── playoffs/               # Bracket eliminatoria
-│   │   │   └── [matchId]/
-│   │   └── bota-de-oro/            # Apuesta al goleador
-│   └── api/
-│       ├── sync-matches/           # Cron: sync desde API-Football
-│       ├── calculate-scores/       # Recalcular puntos (manual/admin)
-│       └── seed/                   # Seed inicial desde openfootball
-├── components/
-│   ├── ui/                         # Componentes base (shadcn/ui)
-│   ├── match-card.tsx
-│   ├── prediction-buttons.tsx      # Botones 1 / X / 2
-│   ├── leaderboard-table.tsx
-│   └── bracket.tsx                 # Bracket visual de eliminatorias
+│   │   ├── layout.tsx                 # Layout autenticado (sidebar + navbar + avatar)
+│   │   ├── navigation.tsx             # Navegación desktop/mobile con active states
+│   │   ├── dashboard/
+│   │   │   ├── page.tsx               # Server Component: fetch leaderboard
+│   │   │   └── leaderboard-client.tsx # Client: tabla + Supabase Realtime
+│   │   ├── grupos/
+│   │   │   ├── page.tsx               # Server Component: fetch matches + predictions
+│   │   │   └── groups-client.tsx      # Client: filtro por grupo, botones 1/X/2
+│   │   ├── playoffs/
+│   │   │   ├── page.tsx               # Server Component: fetch bracket matches
+│   │   │   └── playoffs-client.tsx    # Client: bracket interactivo SVG
+│   │   └── bota-de-oro/
+│   │       ├── page.tsx               # Server Component: fetch prediction + teams
+│   │       └── golden-boot-client.tsx # Client: formulario + countdown timer
+│   ├── api/
+│   │   ├── predictions/route.ts       # POST: guardar/actualizar predicción 1/X/2
+│   │   ├── golden-boot/route.ts       # POST: guardar predicción Bota de Oro
+│   │   ├── seed/route.ts              # POST: importar equipos y fixtures de API-Football
+│   │   └── sync-matches/route.ts      # POST: cron horario, sync resultados
+│   └── auth/
+│       └── callback/route.ts          # OAuth code → session exchange
 ├── lib/
 │   ├── supabase/
-│   │   ├── client.ts               # Cliente browser
-│   │   ├── server.ts               # Cliente server (SSR)
-│   │   └── types.ts                # Tipos generados del schema
+│   │   ├── client.ts                  # createBrowserClient (Client Components)
+│   │   ├── server.ts                  # createServerClient + createAdminClient
+│   │   └── types.ts                   # Tipos generados del schema de Supabase
 │   └── api-football/
-│       ├── client.ts               # Wrapper axios para api-sports.io
-│       ├── sync.ts                 # Lógica de sincronización
-│       └── types.ts                # Tipos de respuesta de la API
+│       ├── client.ts                  # Wrapper HTTP para api-sports.io
+│       └── sync.ts                    # Lógica de sincronización matches → DB
+├── utils/supabase/                    # Clientes alternativos (Supabase dashboard setup)
+│   ├── client.ts
+│   ├── server.ts
+│   └── middleware.ts
 ├── supabase/
 │   └── migrations/
-│       └── 20260101000000_init.sql # Schema completo
-└── vercel.json                     # Config crons
+│       └── 20260101000000_init.sql    # ⭐ Schema completo (tablas + triggers + vistas + RLS)
+├── middleware.ts                       # Auth guard: protege rutas (app) y redirige
+├── declarations.d.ts                   # Declaración de módulos sin tipos
+├── CLAUDE.md                           # Contexto completo del proyecto para AI
+├── JUNIOR.md                           # Guía de buenas prácticas para juniors
+└── vercel.json                         # Config crons de Vercel
 ```
 
 ---
 
-## Base de datos
+## 🗄️ Base de datos — Setup completo
 
-Schema completo en `supabase/migrations/20260101000000_init.sql`.
+Los errores tipo `Could not find the table 'public.matches'` significan que **las tablas no existen todavía** en tu proyecto de Supabase. Necesitas ejecutar la migración SQL.
 
-### Tablas principales
+### Opción 1: SQL Editor de Supabase (recomendada)
 
-| Tabla                      | Descripción                                              |
-|----------------------------|----------------------------------------------------------|
-| `profiles`                 | Usuarios (extiende `auth.users`)                         |
-| `teams`                    | 48 selecciones con su `api_football_id`                  |
-| `matches`                  | 104 partidos — resultado a 90', prórroga y penales       |
-| `group_standings`          | Clasificación en tiempo real de los 12 grupos            |
-| `predictions`              | Predicciones 1/X/2 por usuario y partido                 |
-| `golden_boot_predictions`  | Apuesta al máximo goleador (1 por usuario)               |
-| `scoring_rules`            | Puntos por fase (referencia inmutable, seed incluido)    |
-| `scores`                   | Leaderboard con puntos desglosados por fase              |
-| `sync_logs`                | Historial de sincronizaciones con API-Football           |
+1. Ve al **[SQL Editor de Supabase](https://supabase.com/dashboard/project/cnkkfxlswmagruahulfn/sql/new)**.
+2. Copia y pega **todo** el contenido del archivo `supabase/migrations/20260101000000_init.sql`.
+3. Haz clic en **Run** (Ejecutar).
+4. Deberías ver mensajes de éxito confirmando la creación de tablas, triggers y vistas.
 
-### Vistas
+### Opción 2: Supabase CLI (si lo tienes instalado)
 
-| Vista                        | Descripción                                              |
-|------------------------------|----------------------------------------------------------|
-| `leaderboard`                | Ranking general con desempate aplicado                   |
-| `leaderboard_groups`         | Ranking solo Porra 1 (grupos)                            |
-| `leaderboard_playoffs`       | Ranking solo Porra 2 (playoffs)                          |
-| `match_predictions_summary`  | Estadísticas 1/X/2 por partido (% visible tras kick-off) |
+```bash
+# 1. Instalar Supabase CLI (si no lo tienes)
+npm install -g supabase
 
-### Lógica automática (triggers)
+# 2. Linkear tu proyecto
+npx supabase link --project-ref cnkkfxlswmagruahulfn
 
-- Auto-crear perfil al registrarse con OAuth
-- Calcular `result_ft` al actualizar goles en `matches`
-- **Conceder puntos automáticamente** a todas las predicciones al resolver un partido
-- Bloquear predicciones al kick-off
-- Inicializar `scores` al crear un perfil
-
----
-
-## API de datos — API-Football
-
-- **Provider:** [api-sports.io](https://api-sports.io)
-- **Identificadores:** `league=1`, `season=2026`
-- **Free tier:** 100 requests/día (uso real: ~30-50/día con el cron horario)
-
-### Endpoints utilizados
-
-```
-GET /fixtures?league=1&season=2026&date=<YYYY-MM-DD>   # partidos del día
-GET /standings?league=1&season=2026                    # tablas de grupo
-GET /players/topscorers?league=1&season=2026           # Bota de Oro
+# 3. Ejecutar las migraciones
+npx supabase db push
 ```
 
-### Cron de sincronización
+### Verificar que todo está bien
 
-Un cron job en Vercel ejecuta `POST /api/sync-matches` cada hora durante el torneo (11 jun – 19 jul 2026). El cron:
+Después de ejecutar la migración, puedes verificar en el [Table Editor](https://supabase.com/dashboard/project/cnkkfxlswmagruahulfn/editor) que existen estas tablas:
 
-1. Consulta los partidos del día a API-Football
-2. Actualiza `matches` con resultado, estado y hora de sync
-3. El trigger de Postgres calcula `result_ft` y concede puntos automáticamente
-4. Registra la operación en `sync_logs`
+| Tabla | Filas esperadas |
+|-------|----------------|
+| `profiles` | 0 (se llena al hacer login) |
+| `teams` | 0 (se llena con el seed) |
+| `matches` | 0 (se llena con el seed) |
+| `group_standings` | 0 (se llena con sync) |
+| `predictions` | 0 (se llena al predecir) |
+| `golden_boot_predictions` | 0 (se llena al predecir) |
+| `scoring_rules` | **7** (se llena automáticamente con la migración) |
+| `scores` | 0 (se llena al hacer login) |
+| `sync_logs` | 0 (se llena con sync) |
+
+Y estas vistas:
+
+| Vista | Propósito |
+|-------|-----------|
+| `leaderboard` | Ranking general con criterios de desempate |
+| `leaderboard_groups` | Ranking solo Porra 1 |
+| `leaderboard_playoffs` | Ranking solo Porra 2 |
+| `match_predictions_summary` | Estadísticas 1/X/2 por partido |
+
+### Seed: cargar equipos y partidos
+
+Una vez las tablas existen, necesitas cargar los datos iniciales (equipos y fixtures):
+
+```bash
+# Ejecutar con el servidor de desarrollo corriendo
+curl -X POST http://localhost:3000/api/seed
+```
+
+O simplemente abre en tu navegador: `http://localhost:3000/api/seed` (hace un POST automáticamente si usas herramientas como Postman o Thunder Client).
 
 ---
 
-## Datos estáticos — openfootball
+## Tablas — Detalle del schema
 
-- **Repo:** [openfootball/worldcup.json](https://github.com/openfootball/worldcup.json)
-- **URL:** `https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json`
-- **Uso:** seed inicial de los 104 fixtures, grupos, equipos y horarios
+### `profiles`
+Extiende `auth.users` de Supabase. Se crea automáticamente por trigger cuando un usuario hace OAuth.
 
-> No usar como fuente de resultados en tiempo real (actualización manual por la comunidad, delay no garantizado).
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| `id` | uuid (PK) | Mismo que `auth.users.id` |
+| `display_name` | text | Nombre del usuario (desde Google/GitHub) |
+| `avatar_url` | text | URL del avatar |
+| `role` | user_role | `'participant'` o `'admin'` |
+
+### `teams`
+Las 48 selecciones del Mundial 2026.
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| `id` | uuid (PK) | ID interno |
+| `api_football_id` | integer (unique) | ID en API-Football para joins |
+| `name` | text | Nombre en inglés (`"Spain"`) |
+| `short_code` | text | Código FIFA 3 letras (`"ESP"`) |
+| `group_letter` | char(1) | `'A'` – `'L'` |
+
+### `matches`
+Los 104 partidos del torneo.
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| `id` | uuid (PK) | ID interno |
+| `api_football_id` | integer | ID del fixture en API-Football |
+| `phase` | tournament_phase | `'group'`, `'round_of_16'`, etc. |
+| `match_number` | integer | 1–104, orden FIFA |
+| `home_team_id` / `away_team_id` | uuid (FK) | Equipos |
+| `kickoff_at` | timestamptz | Hora de inicio (UTC) — **cierre de apuestas** |
+| `status` | match_status | `'NS'`, `'FT'`, `'AET'`, etc. |
+| `home_goals_ft` / `away_goals_ft` | integer | Goles a 90 min |
+| `result_ft` | match_result | **Calculado por trigger**: `'1'`, `'X'`, `'2'` |
+
+### `predictions`
+Una predicción por usuario y partido.
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| `user_id` | uuid (FK) | Quién predijo |
+| `match_id` | uuid (FK) | Qué partido |
+| `prediction` | match_result | `'1'`, `'X'`, `'2'` |
+| `is_correct` | boolean | null hasta que haya resultado, luego true/false |
+| `points_awarded` | integer | 0 o N según la fase |
+
+### `scores`
+Leaderboard acumulado. Columnas `total_points*` son `GENERATED ALWAYS AS ... STORED`.
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| `user_id` | uuid (PK) | |
+| `points_group` | integer | Puntos acumulados fase de grupos |
+| `points_round_of_16` | integer | Puntos acumulados octavos |
+| `total_points` | integer (generated) | Suma total automática |
 
 ---
 
-## Instalación y configuración
+## Triggers automáticos
 
-### Requisitos
+| Trigger | Tabla | Qué hace |
+|---------|-------|----------|
+| `on_auth_user_created` | `auth.users` | Crea perfil en `profiles` al hacer OAuth |
+| `on_profile_created_init_scores` | `profiles` | Crea fila en `scores` al crear perfil |
+| `set_match_result_ft` | `matches` | Calcula `result_ft` al actualizar goles |
+| `on_match_result_award_points` | `matches` | Concede puntos a predicciones del partido |
+| `enforce_prediction_lock` | `predictions` | Bloquea edición tras kick-off |
 
-- Node.js 20+
-- Cuenta en [Supabase](https://supabase.com) (free tier)
-- Cuenta en [API-Football](https://dashboard.api-football.com/register) (free tier)
-- Cuenta en [Vercel](https://vercel.com) (free tier)
+---
 
-### Variables de entorno
+## Variables de entorno
 
 ```env
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<publishable-key>
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-key>
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
 
@@ -222,7 +294,9 @@ API_FOOTBALL_KEY=<tu-api-key>
 CRON_SECRET=<random-string>
 ```
 
-### Setup inicial
+---
+
+## Setup inicial
 
 ```bash
 # 1. Clonar el repo
@@ -230,23 +304,20 @@ git clone https://github.com/niicogrc/worldcup-2026.git
 cd worldcup-2026
 
 # 2. Instalar dependencias
-npm install
+npm install --legacy-peer-deps
 
 # 3. Configurar variables de entorno
 cp .env.example .env.local
 # → rellenar con tus credenciales
 
-# 4. Aplicar el schema en Supabase
-# Opción A: pegar supabase/migrations/20260101000000_init.sql en el SQL Editor
-# Opción B: con Supabase CLI
-npx supabase db push
+# 4. Crear las tablas en Supabase
+# → Copiar supabase/migrations/20260101000000_init.sql en el SQL Editor de Supabase y ejecutar
 
-# 5. Ejecutar el seed inicial (fixtures + equipos desde openfootball)
-curl -X POST http://localhost:3000/api/seed \
-  -H "Authorization: Bearer $CRON_SECRET"
-
-# 6. Arrancar en desarrollo
+# 5. Arrancar en desarrollo
 npm run dev
+
+# 6. Ejecutar el seed inicial (con el server corriendo)
+curl -X POST http://localhost:3000/api/seed
 ```
 
 ---
