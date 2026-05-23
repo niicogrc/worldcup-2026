@@ -2,154 +2,133 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { TournamentPhase } from '@/lib/supabase/types'
 
-const API_FOOTBALL_URL = 'https://v3.football.api-sports.io/fixtures?league=1&season=2026'
+const OPENFOOTBALL_URL =
+  'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json'
 
-function mapRoundToPhase(round: string): { phase: TournamentPhase; groupLetter: string | null } {
+function parseKickoffUTC(date: string, time: string): string {
+  // time format: "13:00 UTC-6" or "15:00 UTC-4"
+  const [clock, offsetPart] = time.split(' ')
+  const [hours, minutes] = clock.split(':').map(Number)
+  const offsetMatch = offsetPart.match(/UTC([+-]\d+)/)
+  const offsetHours = offsetMatch ? parseInt(offsetMatch[1]) : 0
+
+  const local = new Date(`${date}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00Z`)
+  local.setUTCHours(local.getUTCHours() - offsetHours)
+  return local.toISOString()
+}
+
+function mapRoundToPhase(round: string): TournamentPhase {
   const r = round.toLowerCase()
-  if (r.includes('group')) {
-    const match = r.match(/group\s+([a-l])/i) || r.match(/stage\s*-\s*([a-l])/i) || r.match(/-\s*([a-l])/i)
-    const letter = match ? match[1].toUpperCase() : null
-    return { phase: 'group', groupLetter: letter }
-  }
-  if (r.includes('32') || r.includes('thirty-two')) return { phase: 'round_of_32', groupLetter: null }
-  if (r.includes('16') || r.includes('sixteen')) return { phase: 'round_of_16', groupLetter: null }
-  if (r.includes('quarter')) return { phase: 'quarter_final', groupLetter: null }
-  if (r.includes('semi')) return { phase: 'semi_final', groupLetter: null }
-  if (r.includes('third') || r.includes('3rd') || r.includes('3rd place')) return { phase: 'third_place', groupLetter: null }
-  if (r.includes('final')) return { phase: 'final', groupLetter: null }
-  
-  return { phase: 'group', groupLetter: null }
+  if (r.includes('matchday') || r.includes('group')) return 'group'
+  if (r.includes('32')) return 'round_of_32'
+  if (r.includes('16')) return 'round_of_16'
+  if (r.includes('quarter')) return 'quarter_final'
+  if (r.includes('semi')) return 'semi_final'
+  if (r.includes('third') || r.includes('3rd')) return 'third_place'
+  if (r.includes('final')) return 'final'
+  return 'group'
+}
+
+function isTBD(name: string): boolean {
+  // openfootball uses codes like "2A", "W89", "L90" for knockout TBD teams
+  return /^[0-9WL]/.test(name)
 }
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Validate Cron Secret Header
     const authHeader = req.headers.get('Authorization')
     const cronSecret = process.env.CRON_SECRET
-    
-    if (!cronSecret) {
-      return NextResponse.json({ error: 'CRON_SECRET is not configured on the server' }, { status: 500 })
-    }
 
+    if (!cronSecret) {
+      return NextResponse.json({ error: 'CRON_SECRET is not configured' }, { status: 500 })
+    }
     if (!authHeader || authHeader !== `Bearer ${cronSecret}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const apiKey = process.env.API_FOOTBALL_KEY
-    if (!apiKey) {
-      return NextResponse.json({ error: 'API_FOOTBALL_KEY is not configured' }, { status: 500 })
-    }
-
-    // 2. Fetch all fixtures from API-Football
-    const response = await fetch(API_FOOTBALL_URL, {
-      headers: {
-        'x-apisports-key': apiKey,
-        'Accept': 'application/json'
-      }
-    })
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch fixtures: ${response.statusText}`)
-    }
-
-    const json = await response.json()
-    if (json.errors && Object.keys(json.errors).length > 0) {
-      return NextResponse.json({ error: 'API-Football errors', details: json.errors }, { status: 400 })
-    }
-
-    const fixtures = json.response || []
-    if (fixtures.length === 0) {
-      return NextResponse.json({ message: 'No fixtures returned from API-Football' }, { status: 200 })
-    }
+    // 1. Fetch openfootball data
+    const res = await fetch(OPENFOOTBALL_URL)
+    if (!res.ok) throw new Error(`Failed to fetch openfootball: ${res.statusText}`)
+    const json = await res.json()
+    const matches: any[] = json.matches || []
 
     const supabase = createAdminClient()
 
-    // 3. Extract and insert unique teams
-    const teamsMap = new Map<number, { name: string; groupLetter: string | null }>()
-    
-    fixtures.forEach((fix: any) => {
-      const home = fix.teams.home
-      const away = fix.teams.away
-      const roundInfo = mapRoundToPhase(fix.league.round)
-      
-      if (home && home.id) {
-        teamsMap.set(home.id, { 
-          name: home.name, 
-          groupLetter: roundInfo.phase === 'group' ? roundInfo.groupLetter : null 
-        })
-      }
-      if (away && away.id) {
-        teamsMap.set(away.id, { 
-          name: away.name, 
-          groupLetter: roundInfo.phase === 'group' ? roundInfo.groupLetter : null 
-        })
-      }
-    })
+    // 2. Extract unique teams from group stage (knockout TBDs are codes, not real names)
+    const teamsMap = new Map<string, { groupLetter: string }>()
 
-    const insertedTeams: Record<string, string> = {} // maps api_football_id -> DB uuid
-    
-    for (const [apiId, teamData] of Array.from(teamsMap.entries())) {
-      // Upsert team
-      const { data: team, error: teamError } = await (supabase.from('teams') as any)
-        .upsert({
-          api_football_id: apiId,
-          name: teamData.name,
-          group_letter: teamData.groupLetter,
-          short_code: teamData.name.substring(0, 3).toUpperCase() // placeholder short code
-        }, { onConflict: 'api_football_id' })
-        .select()
-        .single()
-
-      if (teamError) {
-        console.error(`Error inserting team ${teamData.name}:`, teamError.message)
-        continue
-      }
-      if (team) {
-        insertedTeams[apiId] = (team as any).id
-      }
+    for (const m of matches) {
+      if (!m.group) continue // skip knockout matches
+      const groupLetter = (m.group as string).replace('Group ', '').trim()
+      if (m.team1 && !isTBD(m.team1)) teamsMap.set(m.team1, { groupLetter })
+      if (m.team2 && !isTBD(m.team2)) teamsMap.set(m.team2, { groupLetter })
     }
 
-    // 4. Insert matches
-    let matchesCount = 0
-    
-    for (const fix of fixtures) {
-      const apiId = fix.fixture.id
-      const roundInfo = mapRoundToPhase(fix.league.round)
-      const homeTeamDbId = fix.teams.home?.id ? insertedTeams[fix.teams.home.id] : null
-      const awayTeamDbId = fix.teams.away?.id ? insertedTeams[fix.teams.away.id] : null
+    // 3. Upsert teams
+    const teamNameToId = new Map<string, string>()
 
-      if (!homeTeamDbId || !awayTeamDbId) {
-        // Skip match if teams couldn't be loaded/mapped
+    for (const [name, { groupLetter }] of teamsMap.entries()) {
+      const { data: team, error } = await (supabase.from('teams') as any)
+        .upsert(
+          {
+            name,
+            group_letter: groupLetter,
+            short_code: name.substring(0, 3).toUpperCase(),
+          },
+          { onConflict: 'name' }
+        )
+        .select('id')
+        .single()
+
+      if (error) {
+        console.error(`Error upserting team "${name}":`, error.message)
         continue
       }
+      if (team) teamNameToId.set(name, (team as any).id)
+    }
 
-      // Upsert match
-      const { error: matchError } = await (supabase.from('matches') as any)
-        .upsert({
-          api_football_id: apiId,
-          phase: roundInfo.phase,
-          group_letter: roundInfo.groupLetter,
-          home_team_id: homeTeamDbId,
-          away_team_id: awayTeamDbId,
-          kickoff_at: fix.fixture.date,
-          venue: fix.fixture.venue?.name || null,
-          city: fix.fixture.venue?.city || null,
-          status: 'NS'
-        }, { onConflict: 'api_football_id' })
+    // 4. Upsert matches
+    // api_football_id is not null in schema — use synthetic IDs (90001–90104) as
+    // placeholders until API-Football grants access to season=2026 and we can sync real IDs.
+    let matchesInserted = 0
 
-      if (matchError) {
-        console.error(`Error inserting match api_id=${apiId}:`, matchError.message)
+    for (let i = 0; i < matches.length; i++) {
+      const m = matches[i]
+      const phase = mapRoundToPhase(m.round)
+      const groupLetter = m.group ? (m.group as string).replace('Group ', '').trim() : null
+      const kickoff_at = parseKickoffUTC(m.date, m.time)
+      const syntheticApiId = 90001 + i
+
+      const homeTeamId = m.team1 && !isTBD(m.team1) ? teamNameToId.get(m.team1) ?? null : null
+      const awayTeamId = m.team2 && !isTBD(m.team2) ? teamNameToId.get(m.team2) ?? null : null
+
+      const { error } = await (supabase.from('matches') as any).upsert(
+        {
+          api_football_id: syntheticApiId,
+          match_number: m.num ?? i + 1,
+          phase,
+          group_letter: groupLetter,
+          home_team_id: homeTeamId,
+          away_team_id: awayTeamId,
+          kickoff_at,
+          city: m.ground ?? null,
+          status: 'NS',
+        },
+        { onConflict: 'api_football_id' }
+      )
+
+      if (error) {
+        console.error(`Error upserting match #${i + 1}:`, error.message)
       } else {
-        matchesCount++
+        matchesInserted++
       }
     }
 
     return NextResponse.json({
       success: true,
-      teamsInserted: Object.keys(insertedTeams).length,
-      matchesInserted: matchesCount
-    }, { status: 200 })
-
+      teamsInserted: teamNameToId.size,
+      matchesInserted,
+    })
   } catch (error: any) {
     return NextResponse.json({ error: error.message || String(error) }, { status: 500 })
   }
