@@ -34,6 +34,29 @@ function isTBD(name: string): boolean {
   return /^[0-9WL]/.test(name)
 }
 
+// FIFA/ISO country codes — overrides for teams where substring(0,3) is wrong or offensive
+const TEAM_SHORT_CODES: Record<string, string> = {
+  'Japan': 'JPN',
+  'South Korea': 'KOR',
+  'South Africa': 'RSA',
+  'Austria': 'AUT',
+  'Australia': 'AUS',
+  'Iran': 'IRN',
+  'Iraq': 'IRQ',
+  'DR Congo': 'COD',
+  'Netherlands': 'NED',
+  'Switzerland': 'SUI',
+  'Morocco': 'MAR',
+  'Bosnia & Herzegovina': 'BIH',
+  'Ivory Coast': 'CIV',
+  'New Zealand': 'NZL',
+  'Cape Verde': 'CPV',
+}
+
+function getShortCode(name: string): string {
+  return TEAM_SHORT_CODES[name] ?? name.substring(0, 3).toUpperCase()
+}
+
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get('Authorization')
@@ -73,7 +96,7 @@ export async function POST(req: NextRequest) {
           {
             name,
             group_letter: groupLetter,
-            short_code: name.substring(0, 3).toUpperCase(),
+            short_code: getShortCode(name),
           },
           { onConflict: 'name' }
         )
