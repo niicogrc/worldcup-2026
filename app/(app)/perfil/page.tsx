@@ -27,6 +27,8 @@ export default async function ProfilePage() {
         initialName={(profile as any)?.display_name || user.email?.split('@')[0] || ''}
         initialAvatarUrl={(profile as any)?.avatar_url || ''}
         email={user.email || ''}
+        oauthAvatarUrl={(user.user_metadata?.avatar_url as string) || null}
+        oauthProvider={(user.app_metadata?.provider as string) || null}
       />
     </div>
   )

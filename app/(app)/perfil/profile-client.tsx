@@ -15,9 +15,11 @@ interface ProfileClientProps {
   initialName: string
   initialAvatarUrl: string
   email: string
+  oauthAvatarUrl: string | null
+  oauthProvider: string | null
 }
 
-export default function ProfileClient({ initialName, initialAvatarUrl, email }: ProfileClientProps) {
+export default function ProfileClient({ initialName, initialAvatarUrl, email, oauthAvatarUrl, oauthProvider }: ProfileClientProps) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -121,6 +123,25 @@ export default function ProfileClient({ initialName, initialAvatarUrl, email }: 
               <p className="text-sm font-medium text-white">{name || 'Tu nombre'}</p>
               <p className="text-xs text-zinc-500 mt-0.5">{email}</p>
             </div>
+
+            {/* OAuth avatar button — uses the real photo from the current session */}
+            {oauthAvatarUrl && (
+              <button
+                type="button"
+                onClick={() => { setAvatarUrl(oauthAvatarUrl); setLocalPreview(null); setPendingFile(null) }}
+                className={clsx(
+                  'flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all cursor-pointer border',
+                  (!localPreview && avatarUrl === oauthAvatarUrl)
+                    ? 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+                    : 'bg-[#1f2333] border-[#2a2f42] hover:bg-[#2a2f42] text-zinc-300 hover:text-white'
+                )}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={oauthAvatarUrl} alt="" className="w-5 h-5 rounded-full object-cover" />
+                Usar foto de {oauthProvider === 'github' ? 'GitHub' : 'Google'}
+              </button>
+            )}
+
             {/* File upload button */}
             <button
               type="button"
