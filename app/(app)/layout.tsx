@@ -2,6 +2,7 @@ import React from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import Navigation from './navigation'
+import UserMenu from './user-menu'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -41,17 +42,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Navigation isAdmin={isAdmin} />
         </div>
 
-        {/* User */}
-        <div className="px-3 py-3 border-t border-[#1f2333]">
-          <div className="flex items-center gap-2.5 px-2 py-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={avatarUrl} alt={displayName} className="w-8 h-8 rounded-full bg-[#1f2333] flex-shrink-0" />
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-white truncate">{displayName}</p>
-              <p className="text-[11px] text-zinc-500 truncate">{isAdmin ? '⚡ Admin' : 'Participante'}</p>
-            </div>
-          </div>
-        </div>
+        {/* User menu */}
+        <UserMenu displayName={displayName} avatarUrl={avatarUrl} isAdmin={isAdmin} />
       </aside>
 
       {/* Main */}
