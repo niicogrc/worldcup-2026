@@ -6,6 +6,7 @@ import { isAdmin } from '@/lib/admin'
 import Navigation from './navigation'
 import UserMenu from './user-menu'
 import MobileHeader from './mobile-header'
+import MobileBottomNav from './mobile-bottom-nav'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -57,10 +58,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto">
-          <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-8">
+          <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-8 pb-24 md:pb-8">
             {children}
           </div>
         </main>
+
+        {/* Mobile bottom nav */}
+        <MobileBottomNav />
       </div>
     </div>
   )
