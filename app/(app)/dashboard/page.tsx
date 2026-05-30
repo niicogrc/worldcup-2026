@@ -20,8 +20,8 @@ export default async function DashboardPage() {
 
   // Resolve admin user_id to exclude from leaderboard
   const adminDb = createAdminClient()
-  const { data: { users: authUsers } } = await adminDb.auth.admin.listUsers({ perPage: 200 })
-  const adminUserId = authUsers.find(u => u.email === ADMIN_EMAIL)?.id
+  const listResult = await adminDb.auth.admin.listUsers({ perPage: 200 })
+  const adminUserId = listResult.data?.users?.find(u => u.email === ADMIN_EMAIL)?.id
 
   // Fetch leaderboard view data (exclude admin)
   let query = supabase.from('leaderboard').select('*').order('position', { ascending: true })
