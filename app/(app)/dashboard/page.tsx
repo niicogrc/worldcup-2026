@@ -1,6 +1,7 @@
 import React from 'react'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { ADMIN_EMAIL } from '@/lib/admin'
 import LeaderboardClient from './leaderboard-client'
 
 export const dynamic = 'force-dynamic'
@@ -17,11 +18,15 @@ export default async function DashboardPage() {
     redirect('/login')
   }
 
-  // Fetch leaderboard view data
-  const { data: leaderboard, error: lbError } = await supabase
-    .from('leaderboard')
-    .select('*')
-    .order('position', { ascending: true })
+  // Resolve admin user_id to exclude from leaderboard
+  const adminDb = createAdminClient()
+  const { data: { users: authUsers } } = await adminDb.auth.admin.listUsers({ perPage: 200 })
+  const adminUserId = authUsers.find(u => u.email === ADMIN_EMAIL)?.id
+
+  // Fetch leaderboard view data (exclude admin)
+  let query = supabase.from('leaderboard').select('*').order('position', { ascending: true })
+  if (adminUserId) query = query.neq('user_id', adminUserId)
+  const { data: leaderboard, error: lbError } = await query
 
   if (lbError) {
     console.error('Error fetching leaderboard:', lbError.message)
