@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { RefreshCw, Users, Calendar, Activity, Award, ChevronDown, ChevronUp, Check, X, AlertTriangle, Loader2 } from 'lucide-react'
+import { RefreshCw, Users, Calendar, Activity, Award, ChevronDown, ChevronUp, Check, X, AlertTriangle, Loader2, Trash2 } from 'lucide-react'
 import { clsx } from 'clsx'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -162,7 +162,27 @@ function Toast({ message, type }: { message: string; type: 'ok' | 'err' }) {
 
 // ─── Tab: Usuarios ────────────────────────────────────────────────────────────
 
-function TabUsuarios({ users }: { users: UserRow[] }) {
+function TabUsuarios({ users, onToast }: { users: UserRow[]; onToast: (msg: string, type: 'ok' | 'err') => void }) {
+  const router = useRouter()
+  const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const handleDelete = async (id: string, name: string) => {
+    setDeletingId(id)
+    try {
+      const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error desconocido')
+      onToast(`Usuario "${name}" eliminado`, 'ok')
+      setConfirmId(null)
+      router.refresh()
+    } catch (e: any) {
+      onToast(e.message, 'err')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   return (
     <div>
       <p className="text-zinc-400 text-sm mb-4">{users.length} participantes registrados</p>
@@ -177,6 +197,7 @@ function TabUsuarios({ users }: { users: UserRow[] }) {
               <th className="text-right px-4 py-3">Playoffs</th>
               <th className="text-right px-4 py-3">Bota de Oro</th>
               <th className="text-right px-4 py-3 font-bold text-white">Total</th>
+              <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
@@ -195,6 +216,35 @@ function TabUsuarios({ users }: { users: UserRow[] }) {
                 <td className="px-4 py-3 text-right text-zinc-300">{u.total_points_playoffs}</td>
                 <td className="px-4 py-3 text-right text-zinc-300">{u.points_golden_boot}</td>
                 <td className="px-4 py-3 text-right text-blue-400 font-bold text-base">{u.total_points}</td>
+                <td className="px-4 py-3 text-right">
+                  {confirmId === u.id ? (
+                    <div className="flex items-center justify-end gap-2">
+                      <span className="text-zinc-400 text-xs">¿Eliminar?</span>
+                      <button
+                        onClick={() => handleDelete(u.id, u.display_name)}
+                        disabled={deletingId === u.id}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors cursor-pointer"
+                      >
+                        {deletingId === u.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                        Sí
+                      </button>
+                      <button
+                        onClick={() => setConfirmId(null)}
+                        className="px-2.5 py-1 text-zinc-400 hover:text-white text-xs border border-[#2a2f42] rounded-lg transition-colors cursor-pointer"
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmId(u.id)}
+                      className="p-1.5 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                      title="Eliminar usuario"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -727,7 +777,7 @@ export default function AdminClient({ users, matches, syncLogs, goldenBootPredic
       </div>
 
       {/* Tab content */}
-      {tab === 'usuarios' && <TabUsuarios users={users} />}
+      {tab === 'usuarios' && <TabUsuarios users={users} onToast={showToast} />}
       {tab === 'partidos' && (
         <TabPartidos
           matches={matches}
