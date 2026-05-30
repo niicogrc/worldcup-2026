@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { clsx } from 'clsx'
 import { WORLD_CUP_2026_PLAYERS } from '@/lib/players'
+import { getFlagUrl } from '@/lib/flags'
 
 interface Team {
   id: string
@@ -191,12 +192,16 @@ export default function GoldenBootClient({ initialPrediction, teams, firstMatchK
                           onMouseDown={() => handleSelect(player.name, player.teamName)}
                           className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-[#191c26] transition-colors text-left cursor-pointer border-b border-[#1f2333] last:border-0"
                         >
-                          <div>
-                            <span className="text-sm text-white font-medium">{player.name}</span>
+                          <span className="text-sm text-white font-medium">{player.name}</span>
+                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                            {getFlagUrl(player.teamName) && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={getFlagUrl(player.teamName)!} alt={player.teamName} className="w-5 h-3.5 object-cover rounded-sm" />
+                            )}
+                            <span className="text-[10px] font-mono bg-[#1f2333] text-zinc-400 px-1.5 py-0.5 rounded">
+                              {team?.short_code ?? player.teamName.substring(0, 3).toUpperCase()}
+                            </span>
                           </div>
-                          <span className="text-[10px] font-mono bg-[#1f2333] text-zinc-400 px-1.5 py-0.5 rounded shrink-0 ml-2">
-                            {team?.short_code ?? player.teamName.substring(0, 3).toUpperCase()}
-                          </span>
                         </button>
                       )
                     })}
@@ -221,6 +226,10 @@ export default function GoldenBootClient({ initialPrediction, teams, firstMatchK
             {selectedTeam && (
               <div className="flex items-center gap-2 px-3 py-2 bg-[#0c0d12] border border-[#1f2333] rounded-lg">
                 <span className="text-xs text-zinc-500">Selección:</span>
+                {getFlagUrl(selectedTeam.name) && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={getFlagUrl(selectedTeam.name)!} alt={selectedTeam.name} className="w-6 h-4 object-cover rounded-sm" />
+                )}
                 <span className="text-xs font-medium text-white">{selectedTeam.name}</span>
                 <span className="text-[10px] font-mono bg-[#1f2333] text-zinc-400 px-1.5 py-0.5 rounded ml-auto">
                   {selectedTeam.short_code}

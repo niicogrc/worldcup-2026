@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import { Database, MatchResult } from '@/lib/supabase/types'
+import { getFlagUrl } from '@/lib/flags'
 import { clsx } from 'clsx'
 
 type MatchWithTeams = Database['public']['Tables']['matches']['Row'] & {
@@ -139,7 +140,12 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
                   {/* Home */}
                   <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
                     <span className="text-sm font-medium text-white truncate text-right">{match.home_team?.name}</span>
-                    <span className="text-[10px] font-mono bg-[#1f2333] text-zinc-400 px-1.5 py-0.5 rounded flex-shrink-0">{match.home_team?.short_code}</span>
+                    {match.home_team?.name && getFlagUrl(match.home_team.name) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={getFlagUrl(match.home_team.name)!} alt={match.home_team.name} className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
+                    ) : (
+                      <span className="text-[10px] font-mono bg-[#1f2333] text-zinc-400 px-1.5 py-0.5 rounded flex-shrink-0">{match.home_team?.short_code}</span>
+                    )}
                   </div>
 
                   {/* 1/X/2 buttons */}
@@ -163,7 +169,12 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
 
                   {/* Away */}
                   <div className="flex-1 flex items-center justify-start gap-2 min-w-0">
-                    <span className="text-[10px] font-mono bg-[#1f2333] text-zinc-400 px-1.5 py-0.5 rounded flex-shrink-0">{match.away_team?.short_code}</span>
+                    {match.away_team?.name && getFlagUrl(match.away_team.name) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={getFlagUrl(match.away_team.name)!} alt={match.away_team.name} className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
+                    ) : (
+                      <span className="text-[10px] font-mono bg-[#1f2333] text-zinc-400 px-1.5 py-0.5 rounded flex-shrink-0">{match.away_team?.short_code}</span>
+                    )}
                     <span className="text-sm font-medium text-white truncate">{match.away_team?.name}</span>
                   </div>
                 </div>
@@ -202,7 +213,15 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
                 {groupStandings.map((row) => (
                   <tr key={row.id} className="border-b border-[#1f2333] last:border-0">
                     <td className="py-2.5 px-3 text-center text-zinc-500">{row.position}</td>
-                    <td className="py-2.5 px-3 font-medium text-white truncate max-w-[120px]">{row.team?.name}</td>
+                    <td className="py-2.5 px-3">
+                      <div className="flex items-center gap-1.5">
+                        {row.team?.name && getFlagUrl(row.team.name) && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={getFlagUrl(row.team.name)!} alt={row.team.name} className="w-5 h-3.5 object-cover rounded-sm flex-shrink-0" />
+                        )}
+                        <span className="font-medium text-white truncate max-w-[100px]">{row.team?.name}</span>
+                      </div>
+                    </td>
                     <td className="py-2.5 px-2 text-center text-zinc-400 tabular-nums">{row.played}</td>
                     <td className={clsx('py-2.5 px-2 text-center tabular-nums font-medium',
                       row.goal_diff > 0 ? 'text-green-400' : row.goal_diff < 0 ? 'text-red-400' : 'text-zinc-400'

@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { SingleEliminationBracket, SVGViewer } from '@g-loot/react-tournament-brackets'
 import { Database, MatchResult, TournamentPhase } from '@/lib/supabase/types'
+import { getFlagUrl } from '@/lib/flags'
 import { X, AlertCircle } from 'lucide-react'
 import { clsx } from 'clsx'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -137,18 +138,29 @@ export default function PlayoffsClient({ initialMatches, initialPredictions }: P
           )}
         </div>
         <div className="space-y-1">
-          {[0, 1].map((i) => (
-            <div key={i} className="flex justify-between items-center text-xs">
-              <span className={clsx(
-                'truncate',
-                predictions[dbMatch.id] === (i === 0 ? '1' : '2') ? 'text-blue-400 font-semibold' : 'text-zinc-300',
-                match.participants[i].isWinner ? 'text-white font-bold' : ''
-              )}>
-                {match.participants[i].name}
-              </span>
-              {isFinished && <span className="text-white font-bold ml-1 tabular-nums">{match.participants[i].resultText}</span>}
-            </div>
-          ))}
+          {[0, 1].map((i) => {
+            const teamName = match.participants[i].name
+            const flagUrl = getFlagUrl(teamName)
+            const pred = i === 0 ? '1' : '2'
+            return (
+              <div key={i} className="flex justify-between items-center gap-1 text-xs">
+                <div className="flex items-center gap-1 min-w-0">
+                  {flagUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={flagUrl} alt={teamName} className="w-4 h-3 object-cover rounded-sm flex-shrink-0" />
+                  )}
+                  <span className={clsx(
+                    'truncate',
+                    predictions[dbMatch.id] === pred ? 'text-blue-400 font-semibold' : 'text-zinc-300',
+                    match.participants[i].isWinner ? 'text-white font-bold' : ''
+                  )}>
+                    {teamName}
+                  </span>
+                </div>
+                {isFinished && <span className="text-white font-bold tabular-nums">{match.participants[i].resultText}</span>}
+              </div>
+            )
+          })}
         </div>
         {predicted && (
           <div className="mt-1.5 pt-1 border-t border-[#1f2333] text-[9px] flex justify-between">
@@ -227,14 +239,26 @@ export default function PlayoffsClient({ initialMatches, initialPredictions }: P
                 <span className="text-amber-400 font-medium animate-pulse">En juego</span>
               ) : null}
             </div>
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-sm font-medium text-white">{thirdPlaceMatch.home_team?.name || 'TBD'}</span>
-              <span className="text-sm font-bold text-zinc-400 tabular-nums">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                {thirdPlaceMatch.home_team?.name && getFlagUrl(thirdPlaceMatch.home_team.name) && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={getFlagUrl(thirdPlaceMatch.home_team.name)!} alt="" className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
+                )}
+                <span className="text-sm font-medium text-white">{thirdPlaceMatch.home_team?.name || 'TBD'}</span>
+              </div>
+              <span className="text-sm font-bold text-zinc-400 tabular-nums flex-shrink-0">
                 {['FT', 'AET', 'PEN'].includes(thirdPlaceMatch.status)
                   ? `${thirdPlaceMatch.home_goals_ft} – ${thirdPlaceMatch.away_goals_ft}`
                   : 'vs'}
               </span>
-              <span className="text-sm font-medium text-white text-right">{thirdPlaceMatch.away_team?.name || 'TBD'}</span>
+              <div className="flex items-center gap-2 justify-end">
+                <span className="text-sm font-medium text-white text-right">{thirdPlaceMatch.away_team?.name || 'TBD'}</span>
+                {thirdPlaceMatch.away_team?.name && getFlagUrl(thirdPlaceMatch.away_team.name) && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={getFlagUrl(thirdPlaceMatch.away_team.name)!} alt="" className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
+                )}
+              </div>
             </div>
             {predictions[thirdPlaceMatch.id] && (
               <div className="mt-3 pt-2 border-t border-[#1f2333] flex justify-between items-center text-xs">
@@ -267,8 +291,18 @@ export default function PlayoffsClient({ initialMatches, initialPredictions }: P
               </button>
 
               <p className="text-xs font-medium text-zinc-500 mb-1">{PHASE_NAMES[activePredictMatch.phase]}</p>
-              <h3 className="text-base font-semibold text-white mb-1">
-                {activePredictMatch.home_team?.name || 'Por clasificar'} vs {activePredictMatch.away_team?.name || 'Por clasificar'}
+              <h3 className="text-base font-semibold text-white mb-1 flex items-center gap-2 flex-wrap">
+                {activePredictMatch.home_team?.name && getFlagUrl(activePredictMatch.home_team.name) && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={getFlagUrl(activePredictMatch.home_team.name)!} alt="" className="w-5 h-3.5 object-cover rounded-sm" />
+                )}
+                {activePredictMatch.home_team?.name || 'Por clasificar'}
+                <span className="text-zinc-600 font-normal">vs</span>
+                {activePredictMatch.away_team?.name && getFlagUrl(activePredictMatch.away_team.name) && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={getFlagUrl(activePredictMatch.away_team.name)!} alt="" className="w-5 h-3.5 object-cover rounded-sm" />
+                )}
+                {activePredictMatch.away_team?.name || 'Por clasificar'}
               </h3>
               <p className="text-xs text-zinc-500 mb-5">
                 Cierre: {new Date(activePredictMatch.kickoff_at).toLocaleString('es-ES')}
