@@ -36,18 +36,14 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-4xl font-bebas tracking-wider text-slate-100">
-            DASHBOARD GENERAL
-          </h1>
-          <p className="text-sm text-slate-400">
-            Clasificación oficial y desglose de puntuaciones en tiempo real.
-          </p>
+          <h1 className="text-2xl font-bold text-white">Leaderboard</h1>
+          <p className="text-sm text-zinc-500 mt-0.5">Clasificación oficial en tiempo real.</p>
         </div>
-        <div className="flex items-center gap-2 text-xs bg-slate-900 border border-slate-800 text-emerald-400 py-1.5 px-3 rounded-full sporty-badge uppercase">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          En directo via Realtime
+        <div className="flex items-center gap-2 text-xs bg-[#13151c] border border-[#1f2333] text-blue-400 py-1.5 px-3 rounded-full">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+          En directo
         </div>
       </div>
 

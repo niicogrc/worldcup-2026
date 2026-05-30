@@ -1,94 +1,33 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-bebas: var(--font-bebas-neue), sans-serif;
-  --font-oswald: var(--font-oswald), sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
 
-  /* Custom Color System */
-  --color-brand-dark: #030712;
-  --color-brand-navy: #0b1528;
-  --color-brand-emerald: #10b981;
-  --color-brand-gold: #f59e0b;
-  --color-brand-blue: #2563eb;
-  --color-brand-crimson: #e11d48;
-
-  --animate-glow: glow 3s ease-in-out infinite alternate;
-  --animate-pulse-slow: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --color-app-bg:      #0c0d12;
+  --color-app-card:    #13151c;
+  --color-app-card-2:  #191c26;
+  --color-app-border:  #1f2333;
+  --color-app-border-2:#2a2f42;
 }
 
-@keyframes glow {
-  0% {
-    box-shadow: 0 0 5px rgba(16, 185, 129, 0.2), 0 0 10px rgba(16, 185, 129, 0.1);
-  }
-  100% {
-    box-shadow: 0 0 20px rgba(16, 185, 129, 0.5), 0 0 30px rgba(16, 185, 129, 0.3);
-  }
-}
-
-/* Custom base styles */
 :root {
   color-scheme: dark;
 }
 
 body {
-  background-color: #030712;
-  background-image: 
-    radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.05) 0px, transparent 50%),
-    radial-gradient(at 50% 0%, rgba(37, 99, 235, 0.05) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(245, 158, 11, 0.03) 0px, transparent 50%);
-  background-attachment: fixed;
+  background-color: #0c0d12;
+  background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.025) 1px, transparent 0);
+  background-size: 28px 28px;
+  color: #e2e6f0;
 }
 
-/* Scrollbar customization */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: #090d16;
-}
-::-webkit-scrollbar-thumb {
-  background: #1f293d;
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #10b981;
-}
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #0c0d12; }
+::-webkit-scrollbar-thumb { background: #1f2333; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
 
-/* Utility classes for premium design */
-.glass-panel {
-  background: rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.glass-panel-hover {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.glass-panel-hover:hover {
-  background: rgba(15, 23, 42, 0.6);
-  border-color: rgba(16, 185, 129, 0.3);
-  box-shadow: 0 10px 30px -10px rgba(16, 185, 129, 0.15);
-  transform: translateY(-2px);
-}
-
-.text-glow-emerald {
-  text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
-}
-
-.text-glow-gold {
-  text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
-}
-
-.sporty-badge {
-  font-family: var(--font-bebas-neue);
-  letter-spacing: 0.05em;
-  transform: skewX(-6deg);
-}
-
-/* Custom styles for React Tournament Brackets to fit our dark theme */
+/* React Tournament Brackets compat */
 .gjGkDS, .sc-dmRaPn, .sc-eCYJuG {
   background-color: transparent !important;
 }

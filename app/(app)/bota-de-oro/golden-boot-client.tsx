@@ -1,15 +1,12 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
-import { Award, ShieldAlert, Sparkles, Check } from 'lucide-react'
 import { clsx } from 'clsx'
 
 interface Team {
   id: string
   name: string
   short_code: string | null
-  flag_url: string | null
 }
 
 interface GoldenBootPrediction {
@@ -17,11 +14,6 @@ interface GoldenBootPrediction {
   player_name: string
   team_id: string | null
   is_locked: boolean
-  team?: {
-    id: string
-    name: string
-    flag_url: string | null
-  } | null
 }
 
 interface GoldenBootClientProps {
@@ -30,97 +22,89 @@ interface GoldenBootClientProps {
   firstMatchKickoff: string | null
 }
 
-export default function GoldenBootClient({
-  initialPrediction,
-  teams,
-  firstMatchKickoff,
-}: GoldenBootClientProps) {
+export default function GoldenBootClient({ initialPrediction, teams, firstMatchKickoff }: GoldenBootClientProps) {
   const [playerName, setPlayerName] = useState(initialPrediction?.player_name || '')
   const [teamId, setTeamId] = useState(initialPrediction?.team_id || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
-  // Countdown timer state
-  const [timeLeft, setTimeLeft] = useState<{
-    days: number
-    hours: number
-    minutes: number
-    seconds: number
-    isPast: boolean
-  }>({ days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true })
+  const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true })
 
-  const isLocked = timeLeft.isPast
-
-  // Countdown timer logic
   useEffect(() => {
     if (!firstMatchKickoff) return
-
-    const calculateTime = () => {
-      const difference = +new Date(firstMatchKickoff) - +new Date()
-      if (difference <= 0) {
+    const tick = () => {
+      const diff = +new Date(firstMatchKickoff) - Date.now()
+      if (diff <= 0) {
         setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true })
         return
       }
-
       setTimeLeft({
-        days: Math.floor(difference / (1000 * 60 * 60 * 24)),
-        hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
-        minutes: Math.floor((difference / 1000 / 60) % 60),
-        seconds: Math.floor((difference / 1000) % 60),
+        days: Math.floor(diff / 86400000),
+        hours: Math.floor((diff / 3600000) % 24),
+        minutes: Math.floor((diff / 60000) % 60),
+        seconds: Math.floor((diff / 1000) % 60),
         isPast: false,
       })
     }
-
-    calculateTime()
-    const timer = setInterval(calculateTime, 1000)
-
-    return () => clearInterval(timer)
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
   }, [firstMatchKickoff])
+
+  const isLocked = timeLeft.isPast
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (isLocked) return
-
     setSaving(true)
     setError(null)
     setSuccess(false)
-
     try {
       const res = await fetch('/api/golden-boot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ playerName, teamId }),
       })
-
       if (!res.ok) {
         const data = await res.json()
-        throw new Error(data.error || 'Failed to save prediction')
+        throw new Error(data.error || 'Error al guardar')
       }
-
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
     } catch (err: any) {
-      setError(err.message || 'Error guardando predicción')
+      setError(err.message)
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      {/* Left Column: Input Form */}
-      <div className="lg:col-span-2 space-y-6">
-        <div className="glass-panel p-6 md:p-8 rounded-2xl border border-slate-900 relative">
-          <h2 className="text-2xl font-bebas tracking-wide text-slate-100 mb-6 flex items-center gap-2">
-            <Award className="w-5 h-5 text-brand-gold" />
-            Tu Candidato
-          </h2>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Form */}
+      <div className="lg:col-span-2">
+        <div className="bg-[#13151c] border border-[#1f2333] rounded-xl p-6">
+          {isLocked ? (
+            <div className="flex items-start gap-3 p-4 bg-red-500/5 border border-red-500/20 rounded-lg mb-6">
+              <span className="text-red-400 text-lg flex-shrink-0">🔒</span>
+              <div>
+                <p className="text-sm font-semibold text-red-400">Predicción bloqueada</p>
+                <p className="text-xs text-zinc-500 mt-0.5">El torneo ya ha comenzado. Las predicciones están cerradas.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-start gap-3 p-4 bg-blue-500/5 border border-blue-500/20 rounded-lg mb-6">
+              <span className="text-blue-400 text-lg flex-shrink-0">💡</span>
+              <p className="text-xs text-zinc-400">
+                Elige al jugador que crees que marcará más goles en el torneo. Si hay empate, cualquiera de los máximos goleadores cuenta como acierto.
+              </p>
+            </div>
+          )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <label htmlFor="player_name" className="block text-xs uppercase tracking-wider text-slate-400 font-oswald">
-                Nombre del Goleador
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label htmlFor="player_name" className="block text-xs font-medium text-zinc-500 mb-1.5">
+                Nombre del goleador
               </label>
               <input
                 id="player_name"
@@ -128,18 +112,18 @@ export default function GoldenBootClient({
                 disabled={isLocked || saving}
                 value={playerName}
                 onChange={(e) => setPlayerName(e.target.value)}
-                placeholder="Ej. Kylian Mbappé, Erling Haaland..."
+                placeholder="Ej: Kylian Mbappé, Erling Haaland..."
                 required
                 className={clsx(
-                  'w-full px-4 py-3 bg-slate-950 border border-slate-905 text-slate-100 rounded-xl font-sans focus:outline-none transition-colors duration-200',
-                  isLocked ? 'opacity-70 cursor-not-allowed' : 'focus:border-emerald-500/50'
+                  'w-full px-3 py-2.5 bg-[#0c0d12] border rounded-lg text-sm text-white placeholder:text-zinc-600 focus:outline-none transition-colors',
+                  isLocked ? 'border-[#1f2333] opacity-60 cursor-not-allowed' : 'border-[#1f2333] focus:border-blue-500/50'
                 )}
               />
             </div>
 
-            <div className="space-y-2">
-              <label htmlFor="team_select" className="block text-xs uppercase tracking-wider text-slate-400 font-oswald">
-                Selección Nacional del Jugador
+            <div>
+              <label htmlFor="team_select" className="block text-xs font-medium text-zinc-500 mb-1.5">
+                Selección (opcional)
               </label>
               <select
                 id="team_select"
@@ -147,28 +131,23 @@ export default function GoldenBootClient({
                 value={teamId}
                 onChange={(e) => setTeamId(e.target.value)}
                 className={clsx(
-                  'w-full px-4 py-3 bg-slate-950 border border-slate-905 text-slate-100 rounded-xl font-sans focus:outline-none transition-colors duration-200 cursor-pointer',
-                  isLocked ? 'opacity-70 cursor-not-allowed' : 'focus:border-emerald-500/50'
+                  'w-full px-3 py-2.5 bg-[#0c0d12] border rounded-lg text-sm text-white focus:outline-none transition-colors',
+                  isLocked ? 'border-[#1f2333] opacity-60 cursor-not-allowed' : 'border-[#1f2333] focus:border-blue-500/50'
                 )}
               >
-                <option value="">Selecciona selección (opcional)...</option>
-                {teams.map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.name} ({team.short_code || '??'})
-                  </option>
+                <option value="">Selecciona selección...</option>
+                {teams.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name} ({t.short_code ?? '??'})</option>
                 ))}
               </select>
             </div>
 
             {error && (
-              <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-xl text-xs font-sans">
-                {error}
-              </div>
+              <div className="px-3 py-2.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-xs">{error}</div>
             )}
-
             {success && (
-              <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl text-xs font-semibold flex items-center gap-2 font-sans animate-fade-in">
-                <Check className="w-4 h-4" /> Predicción guardada con éxito
+              <div className="px-3 py-2.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-lg text-xs font-medium">
+                ✓ Predicción guardada correctamente
               </div>
             )}
 
@@ -176,77 +155,52 @@ export default function GoldenBootClient({
               type="submit"
               disabled={isLocked || saving}
               className={clsx(
-                'w-full py-4 rounded-xl font-oswald text-lg uppercase tracking-wider transition-all duration-300 relative cursor-pointer',
+                'w-full py-2.5 rounded-lg text-sm font-semibold transition-all cursor-pointer',
                 isLocked
-                  ? 'bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed'
-                  : 'bg-brand-gold text-slate-950 font-bold hover:shadow-[0_0_20px_rgba(212,175,55,0.2)]'
+                  ? 'bg-[#1f2333] text-zinc-600 cursor-not-allowed'
+                  : saving
+                  ? 'bg-amber-400/80 text-zinc-900 cursor-wait'
+                  : 'bg-amber-400 hover:bg-amber-300 text-zinc-900'
               )}
             >
-              {saving ? 'Guardando...' : isLocked ? 'Predicciones Cerradas' : 'Guardar Predicción'}
+              {saving ? 'Guardando...' : isLocked ? 'Predicciones cerradas' : 'Guardar predicción'}
             </button>
           </form>
         </div>
       </div>
 
-      {/* Right Column: Info & Countdown */}
-      <div className="space-y-6">
-        {/* Countdown card */}
+      {/* Sidebar */}
+      <div className="space-y-4">
+        {/* Countdown */}
         {!isLocked && firstMatchKickoff && (
-          <div className="glass-panel p-6 rounded-2xl border border-slate-900 bg-slate-950/20 relative overflow-hidden">
-            <div className="absolute right-2 bottom-2 text-emerald-500/5"><Sparkles className="w-24 h-24" /></div>
-            
-            <h3 className="text-xs uppercase tracking-wider text-slate-400 font-oswald mb-4">
-              Cierre de Predicciones
-            </h3>
-
+          <div className="bg-[#13151c] border border-[#1f2333] rounded-xl p-5">
+            <p className="text-xs font-medium text-zinc-500 mb-3">Cierra en</p>
             <div className="grid grid-cols-4 gap-2 text-center">
-              <div className="bg-slate-950/80 p-3 rounded-lg border border-slate-900">
-                <span className="block font-bebas text-3xl text-emerald-400">{timeLeft.days}</span>
-                <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bebas">Días</span>
-              </div>
-              <div className="bg-slate-950/80 p-3 rounded-lg border border-slate-900">
-                <span className="block font-bebas text-3xl text-emerald-400">{timeLeft.hours}</span>
-                <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bebas">Hrs</span>
-              </div>
-              <div className="bg-slate-950/80 p-3 rounded-lg border border-slate-900">
-                <span className="block font-bebas text-3xl text-emerald-400">{timeLeft.minutes}</span>
-                <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bebas">Min</span>
-              </div>
-              <div className="bg-slate-950/80 p-3 rounded-lg border border-slate-900">
-                <span className="block font-bebas text-3xl text-emerald-400">{timeLeft.seconds}</span>
-                <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bebas">Seg</span>
-              </div>
-            </div>
-            
-            <p className="text-[10px] text-slate-500 font-sans mt-4 text-center italic">
-              Bloqueo automático al inicio del primer partido del Mundial 2026.
-            </p>
-          </div>
-        )}
-
-        {isLocked && (
-          <div className="glass-panel p-6 rounded-2xl border border-rose-500/20 bg-rose-500/[0.02] flex items-start gap-4">
-            <ShieldAlert className="w-8 h-8 text-rose-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <h3 className="text-sm font-oswald uppercase tracking-wider text-rose-400">Predicción Bloqueada</h3>
-              <p className="text-xs text-slate-400 font-sans mt-1">
-                El Mundial de Fútbol 2026 ya ha comenzado y las predicciones para la Bota de Oro están cerradas para todos los participantes.
-              </p>
+              {[
+                { v: timeLeft.days, l: 'días' },
+                { v: timeLeft.hours, l: 'horas' },
+                { v: timeLeft.minutes, l: 'min' },
+                { v: timeLeft.seconds, l: 'seg' },
+              ].map(({ v, l }) => (
+                <div key={l} className="bg-[#0c0d12] rounded-lg p-2.5 border border-[#1f2333]">
+                  <div className="text-2xl font-bold tabular-nums text-white">{v}</div>
+                  <div className="text-[10px] text-zinc-600 mt-0.5">{l}</div>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* Scoring description card */}
-        <div className="glass-panel p-6 rounded-2xl border border-slate-900">
-          <h3 className="text-xs uppercase tracking-wider text-slate-400 font-oswald mb-3">
-            Reglas de Puntuación
-          </h3>
-          <p className="text-sm text-slate-300 font-sans leading-relaxed">
-            Acertar al máximo goleador del torneo otorga <strong className="text-brand-gold font-semibold">+15 puntos adicionales</strong> en la clasificación general.
+        {/* Scoring rules */}
+        <div className="bg-[#13151c] border border-[#1f2333] rounded-xl p-5">
+          <p className="text-xs font-medium text-zinc-500 mb-3">Puntuación</p>
+          <div className="flex items-center justify-between py-2 border-b border-[#1f2333]">
+            <span className="text-sm text-zinc-300">Bota de Oro</span>
+            <span className="text-sm font-bold text-amber-400">+15 pts</span>
+          </div>
+          <p className="text-xs text-zinc-600 mt-3 leading-relaxed">
+            Si varios jugadores terminan empatados como máximos goleadores, cualquiera de ellos cuenta como acierto.
           </p>
-          <div className="mt-4 p-3 bg-slate-950 rounded-xl border border-slate-900 text-xs text-slate-400 font-sans">
-            ⚽ En caso de empate en la bota de oro (varios goleadores con el mismo número de goles), cualquier participante que haya elegido a uno de ellos se considerará acierto.
-          </div>
         </div>
       </div>
     </div>

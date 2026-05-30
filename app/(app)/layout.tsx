@@ -1,29 +1,14 @@
 import React from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { Trophy, Calendar, Award, GitMerge, LogOut, Shield } from 'lucide-react'
-import Link from 'next/link'
-
-// We'll write a client component for navigation and signout, and render it here
 import Navigation from './navigation'
 
-export default async function AppLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
 
-  // Get user session
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-  if (!user) {
-    redirect('/login')
-  }
-
-  // Fetch user profile
   const { data: profile } = await supabase
     .from('profiles')
     .select('*')
@@ -31,91 +16,66 @@ export default async function AppLayout({
     .single()
 
   const displayName = (profile as any)?.display_name || user.email?.split('@')[0] || 'Usuario'
-  const avatarUrl = (profile as any)?.avatar_url || `https://api.dicebear.com/7.x/adventurer/svg?seed=${displayName}`
+  const avatarUrl = (profile as any)?.avatar_url || `https://api.dicebear.com/7.x/thumbs/svg?seed=${displayName}&backgroundColor=1f2333`
   const isAdmin = (profile as any)?.role === 'admin'
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
+    <div className="flex h-screen bg-[#0c0d12] text-[#e2e6f0] overflow-hidden">
+
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 glass-panel border-r border-slate-900 h-full">
-        {/* Logo Section */}
-        <div className="p-6 border-b border-slate-900/60 flex items-center gap-3">
-          <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20 text-emerald-400">
-            <Trophy className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bebas tracking-wider text-slate-100">
-              PORRA MUNDIAL
-            </h1>
-            <p className="text-xs text-slate-500 font-sans tracking-widest uppercase">
-              FIFA 2026
-            </p>
+      <aside className="hidden md:flex flex-col w-56 bg-[#0c0d12] border-r border-[#1f2333] h-full flex-shrink-0">
+
+        {/* Logo */}
+        <div className="px-5 py-5 border-b border-[#1f2333]">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">⚽</span>
+            <div>
+              <p className="text-white font-bold text-sm leading-tight">Porra Mundial</p>
+              <p className="text-zinc-500 text-[11px] font-medium">FIFA 2026</p>
+            </div>
           </div>
         </div>
 
-        {/* Navigation Section */}
-        <div className="flex-1 px-4 py-6 overflow-y-auto">
+        {/* Nav */}
+        <div className="flex-1 px-3 py-4 overflow-y-auto">
           <Navigation isAdmin={isAdmin} />
         </div>
 
-        {/* User Footer */}
-        <div className="p-4 border-t border-slate-900/60 flex items-center justify-between gap-3 bg-slate-950/40">
-          <div className="flex items-center gap-3 min-w-0">
+        {/* User */}
+        <div className="px-3 py-3 border-t border-[#1f2333]">
+          <div className="flex items-center gap-2.5 px-2 py-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={avatarUrl}
-              alt={displayName}
-              className="w-10 h-10 rounded-full border border-slate-800 bg-slate-900"
-            />
+            <img src={avatarUrl} alt={displayName} className="w-8 h-8 rounded-full bg-[#1f2333] flex-shrink-0" />
             <div className="min-w-0">
-              <p className="text-sm font-semibold truncate text-slate-200">
-                {displayName}
-              </p>
-              <p className="text-xs text-slate-500 truncate flex items-center gap-1 uppercase tracking-wider font-oswald">
-                {isAdmin ? (
-                  <>
-                    <Shield className="w-3 h-3 text-emerald-400" />
-                    Admin
-                  </>
-                ) : (
-                  'Participante'
-                )}
-              </p>
+              <p className="text-sm font-medium text-white truncate">{displayName}</p>
+              <p className="text-[11px] text-zinc-500 truncate">{isAdmin ? '⚡ Admin' : 'Participante'}</p>
             </div>
           </div>
         </div>
       </aside>
 
-      {/* Main Content Area */}
+      {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Mobile Header */}
-        <header className="md:hidden flex items-center justify-between p-4 bg-slate-950/80 backdrop-blur-md border-b border-slate-900">
-          <div className="flex items-center gap-3">
-            <div className="p-1.5 bg-emerald-500/10 rounded-lg border border-emerald-500/20 text-emerald-400">
-              <Trophy className="w-5 h-5" />
-            </div>
-            <span className="text-xl font-bebas tracking-wider">PORRA 2026</span>
-          </div>
 
-          <div className="flex items-center gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={avatarUrl}
-              alt={displayName}
-              className="w-8 h-8 rounded-full border border-slate-800"
-            />
+        {/* Mobile Header */}
+        <header className="md:hidden flex items-center justify-between px-4 py-3 bg-[#0c0d12] border-b border-[#1f2333]">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">⚽</span>
+            <span className="text-white font-bold text-sm">Porra 2026</span>
           </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={avatarUrl} alt={displayName} className="w-8 h-8 rounded-full bg-[#1f2333]" />
         </header>
 
-        {/* Scrollable Content */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-8">
-          <div className="max-w-7xl mx-auto space-y-6">
+        {/* Content */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-8">
             {children}
           </div>
         </main>
 
-        {/* Mobile Navigation bar */}
-        <nav className="md:hidden flex items-center justify-around p-3 bg-slate-950 border-t border-slate-900 z-20">
+        {/* Mobile Nav */}
+        <nav className="md:hidden flex items-center justify-around px-2 py-2 bg-[#0c0d12] border-t border-[#1f2333]">
           <Navigation isMobile isAdmin={isAdmin} />
         </nav>
       </div>

@@ -39,14 +39,10 @@ export default async function PlayoffsPage() {
     .eq('user_id', user.id)
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-4xl font-bebas tracking-wider text-slate-100">
-          PLAYOFFS BRACKET
-        </h1>
-        <p className="text-sm text-slate-400">
-          Visualiza el bracket de las eliminatorias y predice el resultado al final de los <strong className="text-emerald-400">90 minutos reglamentarios</strong> (incluye la opción X de empate).
-        </p>
+        <h1 className="text-2xl font-bold text-white">Playoffs</h1>
+        <p className="text-sm text-zinc-500 mt-0.5">Predice el resultado al final de los 90 minutos (1-X-2). Las prórrogas y penaltis no cuentan.</p>
       </div>
 
       <PlayoffsClient

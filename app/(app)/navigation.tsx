@@ -4,7 +4,7 @@ import React from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Trophy, Calendar, Award, GitMerge, LogOut } from 'lucide-react'
+import { BarChart2, Calendar, Award, GitMerge, LogOut } from 'lucide-react'
 import { clsx } from 'clsx'
 
 interface NavigationProps {
@@ -12,51 +12,45 @@ interface NavigationProps {
   isAdmin?: boolean
 }
 
+const links = [
+  { href: '/dashboard', label: 'Leaderboard', icon: BarChart2 },
+  { href: '/grupos', label: 'Fase de Grupos', icon: Calendar },
+  { href: '/playoffs', label: 'Playoffs', icon: GitMerge },
+  { href: '/bota-de-oro', label: 'Bota de Oro', icon: Award },
+]
+
 export default function Navigation({ isMobile = false, isAdmin = false }: NavigationProps) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
 
-  const links = [
-    { href: '/dashboard', label: 'Leaderboard', icon: Trophy },
-    { href: '/grupos', label: 'Fase de Grupos', icon: Calendar },
-    { href: '/playoffs', label: 'Playoffs Bracket', icon: GitMerge },
-    { href: '/bota-de-oro', label: 'Bota de Oro', icon: Award },
-  ]
-
   const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut()
-      router.refresh()
-      router.push('/login')
-    } catch (err) {
-      console.error('Error signing out:', err)
-    }
+    await supabase.auth.signOut()
+    router.push('/login')
   }
 
   if (isMobile) {
     return (
       <>
-        {links.map((link) => {
-          const Icon = link.icon
-          const isActive = pathname === link.href
+        {links.map(({ href, label, icon: Icon }) => {
+          const active = pathname === href
           return (
             <Link
-              key={link.href}
-              href={link.href}
+              key={href}
+              href={href}
               className={clsx(
-                'flex flex-col items-center justify-center gap-1 text-[10px] uppercase font-bebas tracking-wider py-1 px-3 rounded-lg transition-colors cursor-pointer',
-                isActive ? 'text-emerald-400' : 'text-slate-400 hover:text-slate-200'
+                'flex flex-col items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-medium transition-colors cursor-pointer',
+                active ? 'text-blue-400' : 'text-zinc-500 hover:text-zinc-300'
               )}
             >
               <Icon className="w-5 h-5" />
-              <span>{link.label.split(' ')[0]}</span>
+              <span>{label.split(' ')[0]}</span>
             </Link>
           )
         })}
         <button
           onClick={handleSignOut}
-          className="flex flex-col items-center justify-center gap-1 text-[10px] uppercase font-bebas tracking-wider py-1 px-3 text-slate-400 hover:text-rose-400 cursor-pointer"
+          className="flex flex-col items-center gap-1 px-3 py-1.5 text-[10px] font-medium text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
         >
           <LogOut className="w-5 h-5" />
           <span>Salir</span>
@@ -66,34 +60,48 @@ export default function Navigation({ isMobile = false, isAdmin = false }: Naviga
   }
 
   return (
-    <nav className="space-y-1">
-      {links.map((link) => {
-        const Icon = link.icon
-        const isActive = pathname === link.href
+    <nav className="space-y-0.5">
+      {links.map(({ href, label, icon: Icon }) => {
+        const active = pathname === href
         return (
           <Link
-            key={link.href}
-            href={link.href}
+            key={href}
+            href={href}
             className={clsx(
-              'flex items-center gap-3 px-4 py-3 rounded-xl font-oswald uppercase tracking-wider text-sm transition-all duration-200 cursor-pointer',
-              isActive
-                ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-glow-emerald font-semibold'
-                : 'border border-transparent text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+              'flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer',
+              active
+                ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                : 'text-zinc-400 hover:bg-[#191c26] hover:text-white border border-transparent'
             )}
           >
-            <Icon className={clsx('w-4 h-4', isActive ? 'text-emerald-400' : 'text-slate-400')} />
-            <span>{link.label}</span>
+            <Icon className={clsx('w-4 h-4 flex-shrink-0', active ? 'text-blue-400' : 'text-zinc-500')} />
+            {label}
           </Link>
         )
       })}
 
-      <div className="pt-6 mt-6 border-t border-slate-900/60">
+      {isAdmin && (
+        <Link
+          href="/admin"
+          className={clsx(
+            'flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer mt-2',
+            pathname === '/admin'
+              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+              : 'text-zinc-400 hover:bg-[#191c26] hover:text-white border border-transparent'
+          )}
+        >
+          <span className="w-4 h-4 flex-shrink-0 text-center text-xs">⚡</span>
+          Admin
+        </Link>
+      )}
+
+      <div className="pt-4 mt-4 border-t border-[#1f2333]">
         <button
           onClick={handleSignOut}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-oswald uppercase tracking-wider text-sm text-slate-400 hover:bg-rose-500/5 hover:text-rose-400 border border-transparent transition-all duration-200 cursor-pointer"
+          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-500 hover:bg-red-500/5 hover:text-red-400 border border-transparent transition-all duration-150 cursor-pointer"
         >
-          <LogOut className="w-4 h-4" />
-          <span>Cerrar Sesión</span>
+          <LogOut className="w-4 h-4 flex-shrink-0" />
+          Cerrar sesión
         </button>
       </div>
     </nav>

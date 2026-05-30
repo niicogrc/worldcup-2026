@@ -50,12 +50,8 @@ export default async function GruposPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-4xl font-bebas tracking-wider text-slate-100">
-          FASE DE GRUPOS
-        </h1>
-        <p className="text-sm text-slate-400">
-          Predice el resultado (1-X-2) de los 72 partidos de fase de grupos. Las apuestas cierran al inicio de cada partido.
-        </p>
+        <h1 className="text-2xl font-bold text-white">Fase de Grupos</h1>
+        <p className="text-sm text-zinc-500 mt-0.5">Predice el resultado (1-X-2) de los 72 partidos. Las apuestas cierran al inicio de cada partido.</p>
       </div>
 
       <GroupsClient

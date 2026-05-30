@@ -4,8 +4,6 @@ import React, { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Database } from '@/lib/supabase/types'
-import { motion } from 'framer-motion'
-import { Trophy, Calendar, GitMerge, Award, TrendingUp } from 'lucide-react'
 import { clsx } from 'clsx'
 
 type LeaderboardRow = Database['public']['Views']['leaderboard']['Row']
@@ -17,198 +15,103 @@ interface LeaderboardClientProps {
   userScore: ScoreRow | null
 }
 
-export default function LeaderboardClient({
-  initialLeaderboard,
-  currentUserId,
-  userScore,
-}: LeaderboardClientProps) {
+const MEDALS: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' }
+
+export default function LeaderboardClient({ initialLeaderboard, currentUserId, userScore }: LeaderboardClientProps) {
   const router = useRouter()
   const supabase = createClient()
 
-  // Realtime subscription to database changes on 'scores' table
   useEffect(() => {
     const channel = supabase
       .channel('scores-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'scores' },
-        () => {
-          // Trigger a silent server refresh to update server-fetched data
-          router.refresh()
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, () => router.refresh())
       .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    return () => { supabase.removeChannel(channel) }
   }, [supabase, router])
 
-  // Find current user's rank row
-  const myRankInfo = initialLeaderboard.find((row) => row.user_id === currentUserId)
+  const myRank = initialLeaderboard.find((r) => r.user_id === currentUserId)
 
-  // Card Animation variants
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-      },
-    },
-  } as const
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 100 } },
-  } as const
+  const statCards = [
+    { label: 'Tu posición', value: myRank ? `#${myRank.position}` : '—', sub: 'en el ranking', color: 'text-blue-400' },
+    { label: 'Puntos totales', value: String(userScore?.total_points ?? 0), sub: 'de 371 posibles', color: 'text-white' },
+    { label: 'Fase de grupos', value: String(userScore?.points_group ?? 0), sub: `${userScore?.correct_group ?? 0} aciertos`, color: 'text-white' },
+    { label: 'Playoffs', value: String(userScore?.total_points_playoffs ?? 0), sub: 'puntos eliminatoria', color: 'text-white' },
+  ]
 
   return (
-    <div className="space-y-8">
-      {/* Top User Statistics Grid */}
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="show"
-        className="grid grid-cols-2 lg:grid-cols-4 gap-4"
-      >
-        <motion.div variants={itemVariants} className="glass-panel p-5 rounded-2xl border-l-4 border-l-emerald-500 relative overflow-hidden">
-          <div className="absolute right-2 bottom-2 text-emerald-500/10"><Trophy className="w-16 h-16" /></div>
-          <p className="text-xs uppercase text-slate-400 font-oswald tracking-wider">Tu Posición</p>
-          <p className="text-4xl font-bebas text-slate-100 mt-1">
-            {myRankInfo ? `#${myRankInfo.position}` : 'N/A'}
-          </p>
-          <span className="text-[10px] text-emerald-400 uppercase tracking-widest font-bebas block mt-1">
-            En el ranking general
-          </span>
-        </motion.div>
-
-        <motion.div variants={itemVariants} className="glass-panel p-5 rounded-2xl border-l-4 border-l-brand-gold relative overflow-hidden">
-          <div className="absolute right-2 bottom-2 text-brand-gold/10"><Award className="w-16 h-16" /></div>
-          <p className="text-xs uppercase text-slate-400 font-oswald tracking-wider">Puntos Totales</p>
-          <p className="text-4xl font-bebas text-slate-100 mt-1">
-            {userScore?.total_points ?? 0} <span className="text-lg text-slate-400 font-sans">pts</span>
-          </p>
-          <span className="text-[10px] text-brand-gold/80 uppercase tracking-widest font-bebas block mt-1">
-            Máximo posible: 371 pts
-          </span>
-        </motion.div>
-
-        <motion.div variants={itemVariants} className="glass-panel p-5 rounded-2xl border-l-4 border-l-brand-blue relative overflow-hidden">
-          <div className="absolute right-2 bottom-2 text-brand-blue/10"><Calendar className="w-16 h-16" /></div>
-          <p className="text-xs uppercase text-slate-400 font-oswald tracking-wider">Fase de Grupos</p>
-          <p className="text-4xl font-bebas text-slate-100 mt-1">
-            {userScore?.points_group ?? 0} <span className="text-lg text-slate-400 font-sans">pts</span>
-          </p>
-          <span className="text-[10px] text-brand-blue/80 uppercase tracking-widest font-bebas block mt-1">
-            {userScore?.correct_group ?? 0} Aciertos (1-X-2)
-          </span>
-        </motion.div>
-
-        <motion.div variants={itemVariants} className="glass-panel p-5 rounded-2xl border-l-4 border-l-brand-crimson relative overflow-hidden">
-          <div className="absolute right-2 bottom-2 text-brand-crimson/10"><GitMerge className="w-16 h-16" /></div>
-          <p className="text-xs uppercase text-slate-400 font-oswald tracking-wider">Playoffs</p>
-          <p className="text-4xl font-bebas text-slate-100 mt-1">
-            {userScore?.total_points_playoffs ?? 0} <span className="text-lg text-slate-400 font-sans">pts</span>
-          </p>
-          <span className="text-[10px] text-brand-crimson/80 uppercase tracking-widest font-bebas block mt-1">
-            Eliminatorias directas
-          </span>
-        </motion.div>
-      </motion.div>
-
-      {/* Leaderboard Table Container */}
-      <div className="glass-panel rounded-2xl border border-slate-900 overflow-hidden">
-        <div className="p-6 border-b border-slate-900/60 flex items-center justify-between">
-          <h2 className="text-2xl font-bebas tracking-wide text-slate-100 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-emerald-400" />
-            Tabla de Posiciones
-          </h2>
-          <div className="text-xs text-slate-400 font-sans max-w-xs text-right hidden sm:block">
-            Desempate: 1. Ptos rondas finales | 2. Bota de Oro
+    <div className="space-y-6">
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {statCards.map((s) => (
+          <div key={s.label} className="bg-[#13151c] border border-[#1f2333] rounded-xl p-4">
+            <p className="text-xs font-medium text-zinc-500 mb-2">{s.label}</p>
+            <p className={clsx('text-3xl font-bold tabular-nums', s.color)}>{s.value}</p>
+            <p className="text-xs text-zinc-600 mt-1">{s.sub}</p>
           </div>
+        ))}
+      </div>
+
+      {/* Table */}
+      <div className="bg-[#13151c] border border-[#1f2333] rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-[#1f2333]">
+          <h2 className="text-base font-semibold text-white">Clasificación general</h2>
+          <p className="text-xs text-zinc-500 mt-0.5">Desempate: 1. Pts rondas finales · 2. Bota de Oro · 3. Sorteo</p>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-900 text-xs font-oswald uppercase tracking-wider text-slate-400 bg-slate-950/40">
-                <th className="py-4 px-6 text-center w-16">Pos</th>
-                <th className="py-4 px-6">Jugador</th>
-                <th className="py-4 px-6 text-center">Ptos Grupos</th>
-                <th className="py-4 px-6 text-center">Ptos Playoffs</th>
-                <th className="py-4 px-6 text-center">Bota Oro</th>
-                <th className="py-4 px-6 text-center font-semibold text-slate-200">Total</th>
+              <tr className="text-xs font-medium text-zinc-500 border-b border-[#1f2333]">
+                <th className="py-3 px-5 text-center w-14">Pos</th>
+                <th className="py-3 px-4 text-left">Jugador</th>
+                <th className="py-3 px-4 text-center hidden sm:table-cell">Grupos</th>
+                <th className="py-3 px-4 text-center hidden sm:table-cell">Playoffs</th>
+                <th className="py-3 px-4 text-center hidden sm:table-cell">Bota</th>
+                <th className="py-3 px-5 text-center font-semibold text-zinc-300">Total</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-900/50">
-              {initialLeaderboard.map((row, index) => {
+            <tbody>
+              {initialLeaderboard.map((row) => {
                 const isMe = row.user_id === currentUserId
-                
-                // Position styling
-                let posDisplay: React.ReactNode = row.position
-                if (row.position === 1) posDisplay = <span className="text-2xl">🥇</span>
-                else if (row.position === 2) posDisplay = <span className="text-2xl">🥈</span>
-                else if (row.position === 3) posDisplay = <span className="text-2xl">🥉</span>
-
                 return (
                   <tr
                     key={row.user_id}
                     className={clsx(
-                      'transition-colors duration-150',
-                      isMe 
-                        ? 'bg-emerald-500/5 border-y border-emerald-500/20 text-slate-100 font-medium' 
-                        : 'hover:bg-slate-900/20'
+                      'border-b border-[#1f2333] last:border-0 transition-colors',
+                      isMe ? 'bg-blue-500/5' : 'hover:bg-[#191c26]'
                     )}
                   >
-                    <td className="py-4 px-6 text-center font-bebas text-lg">
-                      {posDisplay}
+                    <td className="py-3 px-5 text-center">
+                      {MEDALS[row.position] ? (
+                        <span className="text-lg">{MEDALS[row.position]}</span>
+                      ) : (
+                        <span className={clsx('text-sm tabular-nums', isMe ? 'text-blue-400 font-bold' : 'text-zinc-400')}>{row.position}</span>
+                      )}
                     </td>
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-3">
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2.5">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={row.avatar_url || `https://api.dicebear.com/7.x/adventurer/svg?seed=${row.display_name}`}
+                          src={row.avatar_url || `https://api.dicebear.com/7.x/thumbs/svg?seed=${row.display_name}&backgroundColor=1f2333`}
                           alt={row.display_name}
-                          className={clsx(
-                            'w-9 h-9 rounded-full bg-slate-950 border',
-                            isMe ? 'border-emerald-400' : 'border-slate-800'
-                          )}
+                          className={clsx('w-8 h-8 rounded-full bg-[#1f2333] flex-shrink-0', isMe ? 'ring-1 ring-blue-400' : '')}
                         />
-                        <div className="min-w-0">
-                          <span className={clsx(
-                            'block text-sm truncate',
-                            isMe ? 'text-emerald-400 font-semibold' : 'text-slate-200'
-                          )}>
-                            {row.display_name}
-                          </span>
-                          {isMe && (
-                            <span className="text-[9px] uppercase tracking-widest text-emerald-400/80 font-bebas block -mt-0.5">
-                              Tú
-                            </span>
-                          )}
+                        <div>
+                          <span className={clsx('text-sm font-medium', isMe ? 'text-blue-400' : 'text-white')}>{row.display_name}</span>
+                          {isMe && <span className="ml-1.5 text-[10px] bg-blue-500/15 text-blue-400 px-1.5 py-0.5 rounded font-medium">Tú</span>}
                         </div>
                       </div>
                     </td>
-                    <td className="py-4 px-6 text-center text-sm font-sans text-slate-300">
-                      {row.total_points_groups} pts
-                    </td>
-                    <td className="py-4 px-6 text-center text-sm font-sans text-slate-300">
-                      {row.total_points_playoffs} pts
-                    </td>
-                    <td className="py-4 px-6 text-center text-sm font-sans">
+                    <td className="py-3 px-4 text-center text-zinc-300 tabular-nums hidden sm:table-cell">{row.total_points_groups}</td>
+                    <td className="py-3 px-4 text-center text-zinc-300 tabular-nums hidden sm:table-cell">{row.total_points_playoffs}</td>
+                    <td className="py-3 px-4 text-center hidden sm:table-cell">
                       {row.points_golden_boot > 0 ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-semibold">
-                          +{row.points_golden_boot} pts
-                        </span>
+                        <span className="text-xs bg-amber-400/10 text-amber-400 border border-amber-400/20 px-2 py-0.5 rounded-full font-medium">+{row.points_golden_boot}</span>
                       ) : (
-                        <span className="text-slate-500">—</span>
+                        <span className="text-zinc-600">—</span>
                       )}
                     </td>
-                    <td className={clsx(
-                      'py-4 px-6 text-center font-bebas text-xl',
-                      isMe ? 'text-emerald-400 text-glow-emerald' : 'text-slate-100'
-                    )}>
+                    <td className={clsx('py-3 px-5 text-center text-lg font-bold tabular-nums', isMe ? 'text-blue-400' : 'text-white')}>
                       {row.total_points}
                     </td>
                   </tr>
@@ -217,8 +120,8 @@ export default function LeaderboardClient({
 
               {initialLeaderboard.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-500 font-sans">
-                    No hay ningún participante registrado todavía.
+                  <td colSpan={6} className="py-12 text-center text-zinc-500 text-sm">
+                    Aún no hay participantes registrados.
                   </td>
                 </tr>
               )}
