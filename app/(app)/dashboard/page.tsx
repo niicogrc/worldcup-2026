@@ -1,7 +1,6 @@
 import React from 'react'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { ADMIN_EMAIL } from '@/lib/admin'
 import LeaderboardClient from './leaderboard-client'
 
 export const dynamic = 'force-dynamic'
@@ -9,23 +8,20 @@ export const dynamic = 'force-dynamic'
 export default async function DashboardPage() {
   const supabase = await createClient()
 
-  // Get active user
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-  if (!user) {
-    redirect('/login')
-  }
+  // Get admin user_ids from profiles.role (no admin API needed)
+  const { data: adminProfiles } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('role', 'admin')
 
-  // Resolve admin user_id to exclude from leaderboard
-  const adminDb = createAdminClient()
-  const listResult = await adminDb.auth.admin.listUsers({ perPage: 200 })
-  const adminUserId = listResult.data?.users?.find(u => u.email === ADMIN_EMAIL)?.id
+  const adminIds = (adminProfiles ?? []).map((p: any) => p.id)
 
-  // Fetch leaderboard view data (exclude admin)
+  // Fetch leaderboard excluding admins
   let query = supabase.from('leaderboard').select('*').order('position', { ascending: true })
-  if (adminUserId) query = query.neq('user_id', adminUserId)
+  for (const id of adminIds) query = query.neq('user_id', id)
   const { data: leaderboard, error: lbError } = await query
 
   if (lbError) {

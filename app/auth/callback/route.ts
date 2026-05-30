@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { ADMIN_EMAIL } from '@/lib/admin'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
@@ -10,22 +11,30 @@ export async function GET(request: Request) {
     const supabase = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
-      // Sync OAuth avatar to profile on first login (if profile has no avatar yet)
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
+        const db = supabase as any
+        const { data: profile } = await db
+          .from('profiles')
+          .select('avatar_url, role')
+          .eq('id', user.id)
+          .single()
+
+        const updates: Record<string, unknown> = {}
+
+        // Sync OAuth avatar on first login
         const oauthAvatar = user.user_metadata?.avatar_url as string | undefined
-        if (oauthAvatar) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('avatar_url')
-            .eq('id', user.id)
-            .single()
-          if (!(profile as any)?.avatar_url) {
-            await (supabase as any)
-              .from('profiles')
-              .update({ avatar_url: oauthAvatar })
-              .eq('id', user.id)
-          }
+        if (oauthAvatar && !profile?.avatar_url) {
+          updates.avatar_url = oauthAvatar
+        }
+
+        // Keep role = 'admin' in sync for the hardcoded admin account
+        if (user.email === ADMIN_EMAIL && profile?.role !== 'admin') {
+          updates.role = 'admin'
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await db.from('profiles').update(updates).eq('id', user.id)
         }
       }
       return NextResponse.redirect(`${origin}${next}`)
