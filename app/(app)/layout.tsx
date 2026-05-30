@@ -1,6 +1,7 @@
 import React from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { isAdmin } from '@/lib/admin'
 import Navigation from './navigation'
 import UserMenu from './user-menu'
 
@@ -18,7 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const displayName = (profile as any)?.display_name || user.email?.split('@')[0] || 'Usuario'
   const avatarUrl = (profile as any)?.avatar_url || `https://api.dicebear.com/7.x/thumbs/svg?seed=${displayName}&backgroundColor=1f2333`
-  const isAdmin = (profile as any)?.role === 'admin'
+  const admin = isAdmin(user.email)
 
   return (
     <div className="flex h-screen bg-[#0c0d12] text-[#e2e6f0] overflow-hidden">
@@ -39,11 +40,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
         {/* Nav */}
         <div className="flex-1 px-3 py-4 overflow-y-auto">
-          <Navigation isAdmin={isAdmin} />
+          <Navigation isAdmin={admin} />
         </div>
 
         {/* User menu */}
-        <UserMenu displayName={displayName} avatarUrl={avatarUrl} isAdmin={isAdmin} />
+        <UserMenu displayName={displayName} avatarUrl={avatarUrl} isAdmin={admin} />
       </aside>
 
       {/* Main */}
@@ -68,7 +69,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
         {/* Mobile Nav */}
         <nav className="md:hidden flex items-center justify-around px-2 py-2 bg-[#0c0d12] border-t border-[#1f2333]">
-          <Navigation isMobile isAdmin={isAdmin} />
+          <Navigation isMobile isAdmin={admin} />
         </nav>
       </div>
     </div>
