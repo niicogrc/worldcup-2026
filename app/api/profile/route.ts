@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 
 export async function PATCH(req: NextRequest) {
@@ -25,6 +26,8 @@ export async function PATCH(req: NextRequest) {
       .eq('id', user.id)
 
     if (error) throw error
+
+    revalidatePath('/', 'layout')
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
