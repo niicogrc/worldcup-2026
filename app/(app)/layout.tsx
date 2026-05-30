@@ -1,4 +1,5 @@
 import React from 'react'
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { isAdmin } from '@/lib/admin'
@@ -29,13 +30,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
         {/* Logo */}
         <div className="px-5 py-5 border-b border-[#1f2333]">
-          <div className="flex items-center gap-2.5">
+          <Link href="/" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
             <span className="text-xl">⚽</span>
             <div>
               <p className="text-white font-bold text-sm leading-tight">Porra Mundial</p>
               <p className="text-zinc-500 text-[11px] font-medium">FIFA 2026</p>
             </div>
-          </div>
+          </Link>
         </div>
 
         {/* Nav */}
@@ -52,10 +53,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
         {/* Mobile Header */}
         <header className="md:hidden flex items-center justify-between px-4 py-3 bg-[#0c0d12] border-b border-[#1f2333]">
-          <div className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <span className="text-lg">⚽</span>
             <span className="text-white font-bold text-sm">Porra 2026</span>
-          </div>
+          </Link>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={avatarUrl} alt={displayName} className="w-8 h-8 rounded-full bg-[#1f2333]" />
         </header>
