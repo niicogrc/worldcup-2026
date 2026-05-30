@@ -1,5 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
+
+async function ensureProfile(userId: string, userMeta: Record<string, string>) {
+  const admin = createAdminClient()
+  const displayName = userMeta['full_name'] || userMeta['name'] || userMeta['email']?.split('@')[0] || 'Usuario'
+  const avatarUrl = userMeta['avatar_url'] || null
+  await (admin.from('profiles') as any).upsert(
+    { id: userId, display_name: displayName, avatar_url: avatarUrl },
+    { onConflict: 'id', ignoreDuplicates: true }
+  )
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,6 +23,9 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    // Ensure profile exists (guard for users who registered before the trigger was in place)
+    await ensureProfile(user.id, user.user_metadata as Record<string, string>)
 
     // 2. Determine if predictions are locked (first match kickoff is in the past)
     const { data: firstMatch } = await supabase
