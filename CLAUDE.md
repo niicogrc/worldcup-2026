@@ -75,19 +75,23 @@ Las vistas `leaderboard`, `leaderboard_groups` y `leaderboard_playoffs` ya imple
 
 ## Base de datos
 
-### Schema en: `supabase/migrations/20260101000000_init.sql`
+### Schema en:
+- `supabase/migrations/20260101000000_init.sql` (schema base)
+- `supabase/migrations/20260102000000_add_porras.sql` (sistema multi-porra)
 
 #### Tablas
 
 ```
 profiles                  — extiende auth.users; auto-creado al hacer OAuth
+porras                    — grupos de competición independientes; campo created_by
+porra_members             — relación N:M entre porras y users; unique (porra_id, user_id)
 teams                     — 48 equipos; campo api_football_id para joins con API-Football
 matches                   — 104 partidos; result_ft calculado por trigger
 group_standings           — 12 tablas de grupo; sincronizado desde API-Football
-predictions               — 1 fila por (user_id, match_id); unique constraint
-golden_boot_predictions   — 1 fila por user_id; unique constraint
+predictions               — 1 fila por (porra_id, user_id, match_id); predicciones independientes por porra
+golden_boot_predictions   — 1 fila por (porra_id, user_id); Bota de Oro independiente por porra
 scoring_rules             — tabla de referencia inmutable; seed en la migración
-scores                    — leaderboard; columnas total_points* son generated always
+scores                    — leaderboard por porra; PK es (porra_id, user_id); columnas total_points* son generated always
 sync_logs                 — historial de sync con API-Football
 ```
 
@@ -106,7 +110,9 @@ user_role      → 'participant' | 'admin'
 |---------|-------|-------------|
 | `on_auth_user_created` | `auth.users` | Crea perfil automáticamente al registrarse |
 | `set_match_result_ft` | `matches` | Calcula `result_ft` al actualizar goles |
-| `on_match_result_award_points` | `matches` | Concede puntos a todas las predicciones del partido |
+| `on_match_result_award_points` | `matches` | Concede puntos a todas las predicciones del partido (por porra) |
+| `on_porra_created_add_creator` | `porras` | Añade automáticamente el creador como miembro |
+| `on_porra_member_created_init_scores` | `porra_members` | Crea fila en `scores` (porra_id, user_id) al unirse |
 | `enforce_prediction_lock` | `predictions` | Bloquea edición tras kick-off |
 | `on_profile_created_init_scores` | `profiles` | Inicializa fila en `scores` |
 
@@ -344,8 +350,14 @@ curl -X POST http://localhost:3000/api/seed -H "Authorization: Bearer TU_CRON_SE
 
 ### 🟡 Pendientes del proyecto
 
-#### 4. Unificar imports del cliente Supabase
-`navigation.tsx` todavía importa de `@/lib/supabase/client`. Decidir si usar `lib/` o `utils/` como ubicación canónica y unificar.
+#### 4. Aplicar migración en Supabase
+La migración `20260102000000_add_porras.sql` añade las tablas `porras` y `porra_members`, modifica `predictions`, `scores` y `golden_boot_predictions` para ser por porra, y actualiza triggers y vistas. Aplicar con:
+```bash
+npx supabase db push
+```
+O pegar el fichero en el SQL Editor del Dashboard de Supabase.
+
+Además, borrar todos los usuarios existentes en Supabase Dashboard → Authentication → Users para que el nuevo flujo de onboarding se active.
 
 #### 5. Panel admin
 Vista para:
@@ -377,3 +389,4 @@ Vista para:
 - [ ] Notificaciones push cuando un partido termine y se asignen puntos
 - [ ] Vista comparativa entre dos usuarios (head-to-head)
 - [ ] Modo oscuro/claro toggle (actualmente solo dark)
+- [ ] Gestión de miembros de porra (ver quién está, expulsar desde el panel admin de la porra)

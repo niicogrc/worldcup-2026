@@ -2,18 +2,24 @@
 
 import React, { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
+
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { User, LogOut, Shield } from 'lucide-react'
 import { clsx } from 'clsx'
+import PorraSelector from './porra-selector'
+
+type Porra = { id: string; name: string }
 
 interface MobileHeaderProps {
   displayName: string
   avatarUrl: string
   isAdmin: boolean
+  activePorra: Porra | null
+  allPorras: Porra[]
 }
 
-export default function MobileHeader({ displayName, avatarUrl, isAdmin }: MobileHeaderProps) {
+export default function MobileHeader({ displayName, avatarUrl, isAdmin, activePorra, allPorras }: MobileHeaderProps) {
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
@@ -34,11 +40,16 @@ export default function MobileHeader({ displayName, avatarUrl, isAdmin }: Mobile
 
   return (
     <header className="md:hidden flex items-center justify-between px-4 py-3 bg-[#0c0d12] border-b border-[#1f2333]">
-      {/* Logo */}
-      <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-        <span className="text-lg">⚽</span>
-        <span className="text-white font-bold text-sm">Porra 2026</span>
-      </Link>
+      {/* Porra selector */}
+      <div className="flex-1 max-w-[200px]">
+        {activePorra ? (
+          <PorraSelector activePorra={activePorra} allPorras={allPorras} />
+        ) : (
+          <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <span className="text-white font-bold text-sm">Porra Mundial</span>
+          </Link>
+        )}
+      </div>
 
       {/* Avatar + dropdown */}
       <div ref={menuRef} className="relative">

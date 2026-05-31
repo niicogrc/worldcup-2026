@@ -22,19 +22,33 @@ export async function GET(request: Request) {
 
         const updates: Record<string, unknown> = {}
 
-        // Sync OAuth avatar on first login
         const oauthAvatar = user.user_metadata?.avatar_url as string | undefined
         if (oauthAvatar && !profile?.avatar_url) {
           updates.avatar_url = oauthAvatar
         }
 
-        // Keep role = 'admin' in sync for the hardcoded admin account
         if (user.email === ADMIN_EMAIL && profile?.role !== 'admin') {
           updates.role = 'admin'
         }
 
         if (Object.keys(updates).length > 0) {
           await db.from('profiles').update(updates).eq('id', user.id)
+        }
+
+        // Admin goes straight to the admin panel
+        if (user.email === ADMIN_EMAIL) {
+          return NextResponse.redirect(`${origin}/admin`)
+        }
+
+        // Regular users: redirect to onboarding if they have no porra memberships
+        const { data: memberships } = await db
+          .from('porra_members')
+          .select('porra_id')
+          .eq('user_id', user.id)
+          .limit(1)
+
+        if (!memberships || memberships.length === 0) {
+          return NextResponse.redirect(`${origin}/onboarding`)
         }
       }
       return NextResponse.redirect(`${origin}${next}`)

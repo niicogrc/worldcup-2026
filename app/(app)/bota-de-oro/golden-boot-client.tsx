@@ -22,9 +22,10 @@ interface GoldenBootClientProps {
   initialPrediction: GoldenBootPrediction | null
   teams: Team[]
   firstMatchKickoff: string | null
+  porraId: string
 }
 
-export default function GoldenBootClient({ initialPrediction, teams, firstMatchKickoff }: GoldenBootClientProps) {
+export default function GoldenBootClient({ initialPrediction, teams, firstMatchKickoff, porraId }: GoldenBootClientProps) {
   const [query, setQuery] = useState(initialPrediction?.player_name || '')
   const [selectedPlayer, setSelectedPlayer] = useState(initialPrediction?.player_name || '')
   const [teamId, setTeamId] = useState(initialPrediction?.team_id || '')
@@ -104,7 +105,7 @@ export default function GoldenBootClient({ initialPrediction, teams, firstMatchK
       const res = await fetch('/api/golden-boot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerName: nameToSave, teamId }),
+        body: JSON.stringify({ playerName: nameToSave, teamId, porraId }),
       })
       if (!res.ok) {
         const data = await res.json()

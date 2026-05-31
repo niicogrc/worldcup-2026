@@ -12,8 +12,9 @@ Todas las rutas dentro de `(app)/` requieren sesión activa. El paréntesis en e
 
 | Archivo | Tipo | Responsabilidad |
 |---|---|---|
-| `layout.tsx` | Server Component | Layout principal: sidebar desktop + nav móvil + contenido |
+| `layout.tsx` | Server Component | Layout principal: fetch de porras del usuario, porra activa, redirect a /onboarding si no tiene |
 | `navigation.tsx` | Client Component | Links de navegación con estado activo + cerrar sesión |
+| `porra-selector.tsx` | Client Component | Dropdown para cambiar de porra activa; llama al Server Action `setActivePorra` + `router.refresh()` |
 | `user-menu.tsx` | Client Component | Menú desplegable del usuario con opciones de perfil y logout |
 
 ---
@@ -23,14 +24,32 @@ Todas las rutas dentro de `(app)/` requieren sesión activa. El paréntesis en e
 Es un **Server Component** que:
 1. Verifica que hay sesión activa (si no → redirect a `/login`)
 2. Fetcha el perfil del usuario para obtener `display_name`, `avatar_url` y `role`
-3. Renderiza el shell de la app con sidebar (desktop) y nav inferior (móvil)
-4. Pasa `{ displayName, avatarUrl, isAdmin }` como props al `UserMenu`
+3. Fetcha las porras del usuario desde `porra_members` (join con `porras`)
+4. Si no tiene porras → redirect a `/onboarding`
+5. Lee la porra activa desde la cookie `active_porra_id`; si inválida, usa la primera
+6. Sincroniza la cookie si estaba vacía/incorrecta (vía Server Action `setActivePorra`)
+7. Renderiza el shell con `PorraSelector` en la cabecera del sidebar (desktop) y el mobile header
 
 ```typescript
 const isAdmin = profile?.role === 'admin'
 ```
 
 Si `role = 'admin'`, aparece el link "Admin" en la navegación.
+
+## Porra activa — flujo completo
+
+```
+layout.tsx (Server Component)
+  ├── porra_members + porras → lista de porras del usuario
+  ├── cookie 'active_porra_id' → porra activa (o first de la lista)
+  └── PorraSelector (Client Component)
+       └── al cambiar: setActivePorra() (Server Action) + router.refresh()
+
+Cada page.tsx independiente:
+  └── getActivePorraId(supabase, userId) → lee cookie y valida membresía
+```
+
+La cookie `active_porra_id` es no-httpOnly para que el cliente también pueda leerla si fuera necesario. Se configura con maxAge de 1 año y sameSite: lax.
 
 ---
 

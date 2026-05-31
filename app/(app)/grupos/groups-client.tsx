@@ -18,6 +18,7 @@ interface GroupsClientProps {
   initialMatches: MatchWithTeams[]
   initialPredictions: PredictionRow[]
   standings: StandingWithTeam[]
+  porraId: string
 }
 
 const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
@@ -26,7 +27,7 @@ function formatKickoff(dateStr: string) {
   return new Date(dateStr).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
-export default function GroupsClient({ initialMatches, initialPredictions, standings }: GroupsClientProps) {
+export default function GroupsClient({ initialMatches, initialPredictions, standings, porraId }: GroupsClientProps) {
   const [selectedGroup, setSelectedGroup] = useState('A')
   const [predictions, setPredictions] = useState<Record<string, MatchResult>>(
     initialPredictions.reduce((acc, p) => ({ ...acc, [p.match_id]: p.prediction }), {})
@@ -47,7 +48,7 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
       const res = await fetch('/api/predictions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matchId, prediction: choice }),
+        body: JSON.stringify({ matchId, prediction: choice, porraId }),
       })
       if (!res.ok) {
         const data = await res.json()

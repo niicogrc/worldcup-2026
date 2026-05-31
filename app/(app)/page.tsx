@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { isAdmin } from '@/lib/admin'
+import { getActivePorraId } from '@/lib/active-porra'
 import { Calendar, GitMerge, Award, BarChart2, User, Clock, Zap, Trophy } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -35,11 +37,14 @@ export default async function HomePage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
+  const porraId = await getActivePorraId(supabase as any, user.id, isAdmin(user.email))
+  if (!porraId) redirect('/onboarding')
+
   const [rankRes, matchesRes, predsRes, goldenBootRes] = await Promise.all([
-    supabase.from('leaderboard').select('position, total_points, display_name').eq('user_id', user.id).maybeSingle(),
+    (supabase as any).from('leaderboard').select('position, total_points, display_name').eq('porra_id', porraId).eq('user_id', user.id).maybeSingle(),
     supabase.from('matches').select('id, phase, home_team_id'),
-    supabase.from('predictions').select('match_id').eq('user_id', user.id),
-    supabase.from('golden_boot_predictions').select('player_name').eq('user_id', user.id).maybeSingle(),
+    (supabase as any).from('predictions').select('match_id').eq('porra_id', porraId).eq('user_id', user.id),
+    (supabase as any).from('golden_boot_predictions').select('player_name').eq('porra_id', porraId).eq('user_id', user.id).maybeSingle(),
   ])
 
   const myRank = rankRes.data as any
@@ -194,7 +199,7 @@ export default async function HomePage() {
         </div>
       </div>
 
-      {/* Profile — subtle */}
+      {/* Profile */}
       <Link
         href="/perfil"
         className="flex items-center gap-3 px-4 py-3 bg-[#13151c] hover:bg-[#191c26] border border-[#1f2333] hover:border-[#2a2f42] rounded-xl transition-all duration-200 group"

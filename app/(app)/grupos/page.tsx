@@ -1,6 +1,8 @@
 import React from 'react'
 import { createClient } from '@/lib/supabase/server'
+import { isAdmin } from '@/lib/admin'
 import { redirect } from 'next/navigation'
+import { getActivePorraId } from '@/lib/active-porra'
 import GroupsClient from './groups-client'
 
 export const dynamic = 'force-dynamic'
@@ -8,16 +10,12 @@ export const dynamic = 'force-dynamic'
 export default async function GruposPage() {
   const supabase = await createClient()
 
-  // Authenticate user
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-  if (!user) {
-    redirect('/login')
-  }
+  const porraId = await getActivePorraId(supabase as any, user.id, isAdmin(user.email))
+  if (!porraId) redirect('/onboarding')
 
-  // Fetch matches in group phase
   const { data: matches, error: matchesError } = await supabase
     .from('matches')
     .select(`
@@ -32,13 +30,12 @@ export default async function GruposPage() {
     console.error('Error fetching matches:', matchesError.message)
   }
 
-  // Fetch user predictions
-  const { data: predictions } = await supabase
+  const { data: predictions } = await (supabase as any)
     .from('predictions')
     .select('*')
+    .eq('porra_id', porraId)
     .eq('user_id', user.id)
 
-  // Fetch group standings
   const { data: standings } = await supabase
     .from('group_standings')
     .select(`
@@ -58,6 +55,7 @@ export default async function GruposPage() {
         initialMatches={matches || []}
         initialPredictions={predictions || []}
         standings={standings || []}
+        porraId={porraId}
       />
     </div>
   )

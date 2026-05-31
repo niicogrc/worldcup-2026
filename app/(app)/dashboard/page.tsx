@@ -1,6 +1,8 @@
 import React from 'react'
 import { createClient } from '@/lib/supabase/server'
+import { isAdmin } from '@/lib/admin'
 import { redirect } from 'next/navigation'
+import { getActivePorraId } from '@/lib/active-porra'
 import LeaderboardClient from './leaderboard-client'
 
 export const dynamic = 'force-dynamic'
@@ -11,7 +13,9 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Get admin user_ids from profiles.role (no admin API needed)
+  const porraId = await getActivePorraId(supabase as any, user.id, isAdmin(user.email))
+  if (!porraId) redirect('/onboarding')
+
   const { data: adminProfiles } = await supabase
     .from('profiles')
     .select('id')
@@ -19,8 +23,11 @@ export default async function DashboardPage() {
 
   const adminIds = (adminProfiles ?? []).map((p: any) => p.id)
 
-  // Fetch leaderboard excluding admins
-  let query = supabase.from('leaderboard').select('*').order('position', { ascending: true })
+  let query = (supabase as any)
+    .from('leaderboard')
+    .select('*')
+    .eq('porra_id', porraId)
+    .order('position', { ascending: true })
   for (const id of adminIds) query = query.neq('user_id', id)
   const { data: leaderboard, error: lbError } = await query
 
@@ -28,10 +35,10 @@ export default async function DashboardPage() {
     console.error('Error fetching leaderboard:', lbError.message)
   }
 
-  // Fetch individual scores breakdown for current user
-  const { data: userScore } = await supabase
+  const { data: userScore } = await (supabase as any)
     .from('scores')
     .select('*')
+    .eq('porra_id', porraId)
     .eq('user_id', user.id)
     .single()
 

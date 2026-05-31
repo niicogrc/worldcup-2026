@@ -17,6 +17,7 @@ type PredictionRow = Database['public']['Tables']['predictions']['Row']
 interface PlayoffsClientProps {
   initialMatches: MatchWithTeams[]
   initialPredictions: PredictionRow[]
+  porraId: string
 }
 
 const PHASE_NAMES: Record<TournamentPhase, string> = {
@@ -29,7 +30,7 @@ const PHASE_NAMES: Record<TournamentPhase, string> = {
   final: 'Gran Final',
 }
 
-export default function PlayoffsClient({ initialMatches, initialPredictions }: PlayoffsClientProps) {
+export default function PlayoffsClient({ initialMatches, initialPredictions, porraId }: PlayoffsClientProps) {
   const [predictions, setPredictions] = useState<Record<string, MatchResult>>(
     initialPredictions.reduce((acc, p) => ({ ...acc, [p.match_id]: p.prediction }), {})
   )
@@ -96,7 +97,7 @@ export default function PlayoffsClient({ initialMatches, initialPredictions }: P
       const res = await fetch('/api/predictions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matchId: activePredictMatch.id, prediction: choice }),
+        body: JSON.stringify({ matchId: activePredictMatch.id, prediction: choice, porraId }),
       })
       if (!res.ok) {
         const data = await res.json()

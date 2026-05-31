@@ -19,11 +19,13 @@ Es Client Component porque necesita acceder a `window.location.origin` para cons
 ## Flujo OAuth
 
 ```
-1. Usuario hace click en "Continuar con Google" o "Continuar con GitHub"
+1. Usuario hace click en "Continuar con Google"
 2. supabase.auth.signInWithOAuth({ provider, options: { redirectTo: origin + '/auth/callback' } })
-3. Supabase redirige al usuario a la pantalla de consentimiento de Google/GitHub
-4. Google/GitHub redirige a /auth/callback con un código temporal
-5. /auth/callback intercambia el código por una sesión y redirige a /dashboard
+3. Supabase redirige al usuario a la pantalla de consentimiento de Google
+4. Google redirige a /auth/callback con un código temporal
+5. /auth/callback intercambia el código por una sesión
+6a. Si el usuario NO tiene porras → redirige a /onboarding
+6b. Si ya tiene porras → redirige a / (home)
 ```
 
 ---

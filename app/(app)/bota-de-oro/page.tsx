@@ -1,6 +1,8 @@
 import React from 'react'
 import { createClient } from '@/lib/supabase/server'
+import { isAdmin } from '@/lib/admin'
 import { redirect } from 'next/navigation'
+import { getActivePorraId } from '@/lib/active-porra'
 import GoldenBootClient from './golden-boot-client'
 
 export const dynamic = 'force-dynamic'
@@ -8,32 +10,27 @@ export const dynamic = 'force-dynamic'
 export default async function GoldenBootPage() {
   const supabase = await createClient()
 
-  // Authenticate user
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-  if (!user) {
-    redirect('/login')
-  }
+  const porraId = await getActivePorraId(supabase as any, user.id, isAdmin(user.email))
+  if (!porraId) redirect('/onboarding')
 
-  // Fetch prediction if exists
-  const { data: prediction } = await supabase
+  const { data: prediction } = await (supabase as any)
     .from('golden_boot_predictions')
     .select(`
       *,
       team:teams(id, name, flag_url)
     `)
+    .eq('porra_id', porraId)
     .eq('user_id', user.id)
     .maybeSingle()
 
-  // Fetch all teams for selection
   const { data: teams } = await supabase
     .from('teams')
     .select('id, name, short_code, flag_url')
     .order('name', { ascending: true })
 
-  // Fetch first match kickoff to check lock status
   const { data: firstMatch } = await supabase
     .from('matches')
     .select('*')
@@ -54,6 +51,7 @@ export default async function GoldenBootPage() {
         initialPrediction={prediction || null}
         teams={teams || []}
         firstMatchKickoff={firstMatchKickoff}
+        porraId={porraId}
       />
     </div>
   )

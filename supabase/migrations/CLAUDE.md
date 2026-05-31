@@ -2,7 +2,9 @@
 
 ## Qué hay aquí
 
-La migración inicial (`20260101000000_init.sql`) contiene el schema completo de la aplicación: tablas, enums, triggers, vistas y políticas RLS. Es el documento más importante de la infraestructura de datos.
+Dos migraciones:
+- `20260101000000_init.sql` — schema base (tablas, enums, triggers, vistas, RLS)
+- `20260102000000_add_porras.sql` — sistema multi-porra (ver sección "Porras" más abajo)
 
 ---
 
@@ -25,6 +27,48 @@ match_status    → 'NS' | '1H' | 'HT' | '2H' | 'ET' | 'P' | 'FT' | 'AET' | 'PEN
 tournament_phase → 'group' | 'round_of_32' | 'round_of_16' | 'quarter_final' | 'semi_final' | 'third_place' | 'final'
 user_role       → 'participant' | 'admin'
 ```
+
+---
+
+## Porras (migración 20260102)
+
+El sistema es multi-porra: cada usuario puede crear y unirse a múltiples porras. Las predicciones y puntuaciones son independientes por porra.
+
+### Tablas nuevas
+
+**`porras`** — grupos de competición
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id` | UUID PK | — |
+| `name` | text | Nombre de la porra |
+| `created_by` | UUID FK → profiles | El creador es automáticamente admin y miembro |
+
+**`porra_members`** — relación N:M
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `porra_id` | UUID FK → porras | — |
+| `user_id` | UUID FK → profiles | — |
+| `joined_at` | timestamptz | — |
+| UNIQUE | `(porra_id, user_id)` | — |
+
+### Cambios en tablas existentes
+
+- **`predictions`**: UNIQUE ahora es `(porra_id, user_id, match_id)` (era `user_id, match_id`)
+- **`golden_boot_predictions`**: UNIQUE ahora es `(porra_id, user_id)` (era `user_id`)
+- **`scores`**: PK ahora es `(porra_id, user_id)` (era `user_id`)
+- **Leaderboard views**: todas incluyen `porra_id` y usan `PARTITION BY porra_id` en el `ROW_NUMBER()`
+
+### Triggers nuevos/actualizados
+
+| Trigger | Tabla | Descripción |
+|---|---|---|
+| `on_porra_created_add_creator` | `porras` | Al crear una porra, añade el creador como miembro automáticamente |
+| `on_porra_member_created_init_scores` | `porra_members` | Al unirse a una porra, crea fila en `scores` con todos los puntos a 0 |
+| `award_points_on_result` | `matches` | Actualizado: ahora usa `v_pred.porra_id` para filtrar scores por porra |
+
+### Flujo de porra activa
+
+La porra activa se almacena en la cookie `active_porra_id` (no-httpOnly, 1 año). Se establece mediante el Server Action `app/actions/porra.ts → setActivePorra(porraId)`. Cada page.tsx la lee vía `lib/active-porra.ts → getActivePorraId()`.
 
 ---
 

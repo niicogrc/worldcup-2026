@@ -20,7 +20,7 @@ export default async function AdminPage() {
     authUsersRes,
   ] = await Promise.all([
     admin.from('profiles').select('id, display_name, avatar_url').order('display_name'),
-    admin.from('scores').select('user_id, total_points, total_points_groups, total_points_playoffs, points_golden_boot'),
+    admin.from('scores').select('porra_id, user_id, total_points, total_points_groups, total_points_playoffs, points_golden_boot'),
     admin.from('matches').select(`
       id, phase, match_number, group_letter, kickoff_at, venue, city, status,
       home_goals_ft, away_goals_ft, home_goals_aet, away_goals_aet, home_goals_pen, away_goals_pen,
@@ -44,7 +44,17 @@ export default async function AdminPage() {
   const goldenBoot = goldenBootRes.data as any[] ?? []
   const authUsers = authUsersRes.data?.users ?? []
 
-  const scoreMap = new Map(scores.map(s => [s.user_id, s]))
+  // Aggregate scores across all porras per user
+  const scoreMap = new Map<string, { total_points: number; total_points_groups: number; total_points_playoffs: number; points_golden_boot: number }>()
+  for (const s of scores) {
+    const prev = scoreMap.get(s.user_id) ?? { total_points: 0, total_points_groups: 0, total_points_playoffs: 0, points_golden_boot: 0 }
+    scoreMap.set(s.user_id, {
+      total_points: prev.total_points + (s.total_points ?? 0),
+      total_points_groups: prev.total_points_groups + (s.total_points_groups ?? 0),
+      total_points_playoffs: prev.total_points_playoffs + (s.total_points_playoffs ?? 0),
+      points_golden_boot: Math.max(prev.points_golden_boot, s.points_golden_boot ?? 0),
+    })
+  }
   const emailMap = new Map(authUsers.map(u => [u.id, u.email ?? '']))
 
   const users = profiles.map(p => ({
