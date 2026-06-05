@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { RefreshCw, Users, Calendar, Activity, Award, ChevronDown, ChevronUp, Check, X, AlertTriangle, Loader2, Trash2 } from 'lucide-react'
+import { RefreshCw, Users, Calendar, Activity, Award, ChevronDown, ChevronUp, Check, X, AlertTriangle, Loader2, Trash2, BarChart2 } from 'lucide-react'
 import { clsx } from 'clsx'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -729,15 +729,138 @@ function TabBotaDeOro({ predictions, onToast }: { predictions: GoldenBootPredict
   )
 }
 
+// ─── Tab: Stats ───────────────────────────────────────────────────────────────
+
+interface PorraStats {
+  id: string
+  name: string
+  total_members: number
+  members_with_all_predictions: number
+  members_with_golden_boot: number
+  total_predictions: number
+  total_possible: number
+  completion_pct: number
+}
+
+interface GlobalStats {
+  total_users: number
+  total_predictions: number
+  matches_with_result: number
+  matches_total: number
+}
+
+interface StatsData {
+  porras: PorraStats[]
+  global: GlobalStats
+}
+
+function TabStats({ onToast }: { onToast: (msg: string, type: 'ok' | 'err') => void }) {
+  const [data, setData] = useState<StatsData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/admin/stats')
+      .then(res => res.json())
+      .then(json => {
+        if (json.error) throw new Error(json.error)
+        setData(json)
+      })
+      .catch((e: any) => onToast(e.message, 'err'))
+      .finally(() => setLoading(false))
+  }, [onToast])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-5 h-5 animate-spin text-zinc-500" />
+      </div>
+    )
+  }
+
+  if (!data) return null
+
+  const { global, porras } = data
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Usuarios registrados', value: global.total_users },
+          { label: 'Predicciones totales', value: global.total_predictions },
+          { label: 'Partidos con resultado', value: `${global.matches_with_result} / ${global.matches_total}` },
+          { label: 'Partidos restantes', value: global.matches_total - global.matches_with_result },
+        ].map(s => (
+          <div key={s.label} className="bg-[#13151c] border border-[#1f2333] rounded-xl px-4 py-3">
+            <p className="text-2xl font-bold text-white">{s.value}</p>
+            <p className="text-xs text-zinc-500 mt-0.5">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-3">
+        {porras.map(porra => {
+          const fillColor = porra.completion_pct >= 80 ? 'bg-green-500' : 'bg-blue-500'
+          return (
+            <div key={porra.id} className="bg-[#13151c] border border-[#1f2333] rounded-xl p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-white font-semibold text-sm">{porra.name}</h3>
+                <span className="text-zinc-400 text-xs">{porra.total_members} miembros</span>
+              </div>
+
+              <div className="mb-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-zinc-500 text-xs">Completitud de predicciones</span>
+                  <span className="text-zinc-300 text-xs font-mono">{porra.completion_pct}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-[#1f2333] overflow-hidden">
+                  <div
+                    className={clsx('h-full rounded-full transition-all', fillColor)}
+                    style={{ width: `${Math.min(porra.completion_pct, 100)}%` }}
+                  />
+                </div>
+                <p className="text-zinc-600 text-xs mt-1">
+                  {porra.total_predictions} de {porra.total_possible} predicciones posibles
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-[#0c0d12] rounded-lg px-3 py-2.5">
+                  <p className="text-white font-semibold text-sm">
+                    {porra.members_with_all_predictions}
+                    <span className="text-zinc-500 font-normal"> / {porra.total_members}</span>
+                  </p>
+                  <p className="text-zinc-500 text-xs mt-0.5">Predicciones completas (104)</p>
+                </div>
+                <div className="bg-[#0c0d12] rounded-lg px-3 py-2.5">
+                  <p className="text-white font-semibold text-sm">
+                    {porra.members_with_golden_boot}
+                    <span className="text-zinc-500 font-normal"> / {porra.total_members}</span>
+                  </p>
+                  <p className="text-zinc-500 text-xs mt-0.5">Con Bota de Oro</p>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+
+        {porras.length === 0 && (
+          <p className="text-zinc-500 text-sm text-center py-8">Sin porras</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-type Tab = 'usuarios' | 'partidos' | 'sync' | 'bota'
+type Tab = 'usuarios' | 'partidos' | 'sync' | 'bota' | 'stats'
 
 const TABS: { id: Tab; label: string; icon: React.FC<{ className?: string }> }[] = [
   { id: 'usuarios', label: 'Usuarios', icon: Users },
   { id: 'partidos', label: 'Partidos', icon: Calendar },
   { id: 'sync', label: 'Sync', icon: Activity },
   { id: 'bota', label: 'Bota de Oro', icon: Award },
+  { id: 'stats', label: 'Stats', icon: BarChart2 },
 ]
 
 export default function AdminClient({ users, matches, syncLogs, goldenBootPredictions, currentUserId }: Props) {
@@ -832,6 +955,7 @@ export default function AdminClient({ users, matches, syncLogs, goldenBootPredic
       )}
       {tab === 'sync' && <TabSync syncLogs={syncLogs} onToast={showToast} />}
       {tab === 'bota' && <TabBotaDeOro predictions={goldenBootPredictions} onToast={showToast} />}
+      {tab === 'stats' && <TabStats onToast={showToast} />}
 
       {/* Toast */}
       {toast && <Toast message={toast.message} type={toast.type} />}
