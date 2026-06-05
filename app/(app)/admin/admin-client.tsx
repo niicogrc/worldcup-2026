@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { RefreshCw, Users, Calendar, Activity, Award, ChevronDown, ChevronUp, Check, X, AlertTriangle, Loader2, Trash2 } from 'lucide-react'
+import { RefreshCw, Users, Calendar, Activity, Award, ChevronDown, ChevronUp, Check, X, AlertTriangle, Loader2, Trash2, Trophy } from 'lucide-react'
 import { clsx } from 'clsx'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -60,11 +60,20 @@ interface GoldenBootPrediction {
   team_name: string | null
 }
 
+interface PorraRow {
+  id: string
+  name: string
+  created_at: string
+  member_count: number
+  members: { id: string; display_name: string; email: string }[]
+}
+
 interface Props {
   users: UserRow[]
   matches: MatchRow[]
   syncLogs: SyncLog[]
   goldenBootPredictions: GoldenBootPrediction[]
+  porras: PorraRow[]
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -684,18 +693,131 @@ function TabBotaDeOro({ predictions, onToast }: { predictions: GoldenBootPredict
   )
 }
 
+// ─── Tab: Porras ──────────────────────────────────────────────────────────────
+
+function TabPorras({ porras, onToast }: { porras: PorraRow[]; onToast: (msg: string, type: 'ok' | 'err') => void }) {
+  const router = useRouter()
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const handleDelete = async (id: string, name: string) => {
+    setDeletingId(id)
+    try {
+      const res = await fetch(`/api/admin/porras/${id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error desconocido')
+      onToast(`Porra "${name}" eliminada`, 'ok')
+      setConfirmId(null)
+      router.refresh()
+    } catch (e: any) {
+      onToast(e.message, 'err')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  return (
+    <div>
+      <p className="text-zinc-400 text-sm mb-4">{porras.length} porra{porras.length !== 1 ? 's' : ''} activa{porras.length !== 1 ? 's' : ''}</p>
+      <div className="overflow-x-auto rounded-xl border border-[#1f2333]">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[#1f2333] text-zinc-500 text-xs uppercase tracking-wide">
+              <th className="text-left px-4 py-3">Nombre</th>
+              <th className="text-right px-4 py-3">Miembros</th>
+              <th className="text-left px-4 py-3">Creada</th>
+              <th className="px-4 py-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {porras.map(p => (
+              <React.Fragment key={p.id}>
+                <tr className="border-b border-[#1f2333] last:border-0 hover:bg-[#13151c] transition-colors">
+                  <td className="px-4 py-3">
+                    <span className="text-white font-medium">{p.name}</span>
+                  </td>
+                  <td className="px-4 py-3 text-right text-zinc-300">{p.member_count}</td>
+                  <td className="px-4 py-3 text-zinc-400 text-xs">{fmtDateShort(p.created_at)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => setExpandedId(expandedId === p.id ? null : p.id)}
+                        className="p-1.5 text-zinc-600 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors cursor-pointer"
+                        title="Ver miembros"
+                      >
+                        {expandedId === p.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
+                      {confirmId === p.id ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-zinc-400 text-xs">¿Eliminar?</span>
+                          <button
+                            onClick={() => handleDelete(p.id, p.name)}
+                            disabled={deletingId === p.id}
+                            className="flex items-center gap-1 px-2.5 py-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors cursor-pointer"
+                          >
+                            {deletingId === p.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                            Sí
+                          </button>
+                          <button
+                            onClick={() => setConfirmId(null)}
+                            className="px-2.5 py-1 text-zinc-400 hover:text-white text-xs border border-[#2a2f42] rounded-lg transition-colors cursor-pointer"
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmId(p.id)}
+                          className="p-1.5 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                          title="Eliminar porra"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+                {expandedId === p.id && (
+                  <tr className="border-b border-[#1f2333]">
+                    <td colSpan={4} className="px-6 py-3 bg-[#0f1118]">
+                      {p.members.length === 0 ? (
+                        <p className="text-zinc-500 text-xs">Sin miembros</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-3">
+                          {p.members.map(m => (
+                            <div key={m.id} className="flex flex-col gap-0.5">
+                              <span className="text-zinc-200 text-xs font-medium">{m.display_name}</span>
+                              <span className="text-zinc-500 text-[11px] font-mono">{m.email}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-type Tab = 'usuarios' | 'partidos' | 'sync' | 'bota'
+type Tab = 'usuarios' | 'partidos' | 'sync' | 'bota' | 'porras'
 
 const TABS: { id: Tab; label: string; icon: React.FC<{ className?: string }> }[] = [
   { id: 'usuarios', label: 'Usuarios', icon: Users },
   { id: 'partidos', label: 'Partidos', icon: Calendar },
   { id: 'sync', label: 'Sync', icon: Activity },
   { id: 'bota', label: 'Bota de Oro', icon: Award },
+  { id: 'porras', label: 'Porras', icon: Trophy },
 ]
 
-export default function AdminClient({ users, matches, syncLogs, goldenBootPredictions }: Props) {
+export default function AdminClient({ users, matches, syncLogs, goldenBootPredictions, porras }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('usuarios')
   const [toast, setToast] = useState<{ message: string; type: 'ok' | 'err' } | null>(null)
@@ -743,9 +865,10 @@ export default function AdminClient({ users, matches, syncLogs, goldenBootPredic
       </div>
 
       {/* Stats bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
         {[
           { label: 'Participantes', value: users.length },
+          { label: 'Porras activas', value: porras.length },
           { label: 'Partidos total', value: matches.length },
           { label: 'Con resultado', value: matches.filter(m => m.result_ft).length },
           { label: 'Syncs realizados', value: syncLogs.length },
@@ -787,6 +910,7 @@ export default function AdminClient({ users, matches, syncLogs, goldenBootPredic
       )}
       {tab === 'sync' && <TabSync syncLogs={syncLogs} onToast={showToast} />}
       {tab === 'bota' && <TabBotaDeOro predictions={goldenBootPredictions} onToast={showToast} />}
+      {tab === 'porras' && <TabPorras porras={porras} onToast={showToast} />}
 
       {/* Toast */}
       {toast && <Toast message={toast.message} type={toast.type} />}
