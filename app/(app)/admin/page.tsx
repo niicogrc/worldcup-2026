@@ -17,6 +17,7 @@ export default async function AdminPage() {
   let syncLogs: any[] = []
   let goldenBoot: any[] = []
   let authUsers: any[] = []
+  let teams: any[] = []
 
   try {
     const [
@@ -26,6 +27,7 @@ export default async function AdminPage() {
       syncLogsRes,
       goldenBootRes,
       authUsersRes,
+      teamsRes,
     ] = await Promise.all([
       admin.from('profiles').select('id, display_name, avatar_url').order('display_name'),
       admin.from('scores').select('porra_id, user_id, total_points, total_points_groups, total_points_playoffs, points_golden_boot'),
@@ -33,6 +35,7 @@ export default async function AdminPage() {
         id, phase, match_number, group_letter, kickoff_at, venue, city, status,
         home_goals_ft, away_goals_ft, home_goals_aet, away_goals_aet, home_goals_pen, away_goals_pen,
         result_ft, last_synced_at,
+        home_team_id, away_team_id,
         home_team:teams!matches_home_team_id_fkey(name, name_es, short_code),
         away_team:teams!matches_away_team_id_fkey(name, name_es, short_code)
       `).order('kickoff_at', { ascending: true }),
@@ -43,6 +46,7 @@ export default async function AdminPage() {
         team:teams(name_es, name)
       `).order('created_at'),
       admin.auth.admin.listUsers({ perPage: 200 }),
+      admin.from('teams').select('id, name, name_es, short_code').order('name_es', { ascending: true, nullsFirst: false }),
     ])
 
     profiles = profilesRes.data as any[] ?? []
@@ -51,6 +55,7 @@ export default async function AdminPage() {
     syncLogs = syncLogsRes.data as any[] ?? []
     goldenBoot = goldenBootRes.data as any[] ?? []
     authUsers = authUsersRes.data?.users ?? []
+    teams = teamsRes.data as any[] ?? []
   } catch (err) {
     console.error('[admin] Error fetching data:', err)
   }
@@ -96,6 +101,8 @@ export default async function AdminPage() {
     away_goals_pen: m.away_goals_pen,
     result_ft: m.result_ft,
     last_synced_at: m.last_synced_at,
+    home_team_id: m.home_team_id,
+    away_team_id: m.away_team_id,
     home_team: m.home_team,
     away_team: m.away_team,
   }))
@@ -116,6 +123,7 @@ export default async function AdminPage() {
       matches={formattedMatches}
       syncLogs={syncLogs}
       goldenBootPredictions={formattedGoldenBoot}
+      teams={teams}
     />
   )
 }
