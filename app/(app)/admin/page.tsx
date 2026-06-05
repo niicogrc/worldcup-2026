@@ -11,38 +11,49 @@ export default async function AdminPage() {
 
   const admin = createAdminClient()
 
-  const [
-    profilesRes,
-    scoresRes,
-    matchesRes,
-    syncLogsRes,
-    goldenBootRes,
-    authUsersRes,
-  ] = await Promise.all([
-    admin.from('profiles').select('id, display_name, avatar_url').order('display_name'),
-    admin.from('scores').select('porra_id, user_id, total_points, total_points_groups, total_points_playoffs, points_golden_boot'),
-    admin.from('matches').select(`
-      id, phase, match_number, group_letter, kickoff_at, venue, city, status,
-      home_goals_ft, away_goals_ft, home_goals_aet, away_goals_aet, home_goals_pen, away_goals_pen,
-      result_ft, last_synced_at,
-      home_team:teams!matches_home_team_id_fkey(name, name_es, short_code),
-      away_team:teams!matches_away_team_id_fkey(name, name_es, short_code)
-    `).order('kickoff_at', { ascending: true }),
-    admin.from('sync_logs').select('*').order('synced_at', { ascending: false }).limit(30),
-    admin.from('golden_boot_predictions').select(`
-      id, user_id, player_name, is_locked, created_at,
-      profile:profiles(display_name),
-      team:teams(name_es, name)
-    `).order('created_at'),
-    admin.auth.admin.listUsers({ perPage: 200 }),
-  ])
+  let profiles: any[] = []
+  let scores: any[] = []
+  let matches: any[] = []
+  let syncLogs: any[] = []
+  let goldenBoot: any[] = []
+  let authUsers: any[] = []
 
-  const profiles = profilesRes.data as any[] ?? []
-  const scores = scoresRes.data as any[] ?? []
-  const matches = matchesRes.data as any[] ?? []
-  const syncLogs = syncLogsRes.data as any[] ?? []
-  const goldenBoot = goldenBootRes.data as any[] ?? []
-  const authUsers = authUsersRes.data?.users ?? []
+  try {
+    const [
+      profilesRes,
+      scoresRes,
+      matchesRes,
+      syncLogsRes,
+      goldenBootRes,
+      authUsersRes,
+    ] = await Promise.all([
+      admin.from('profiles').select('id, display_name, avatar_url').order('display_name'),
+      admin.from('scores').select('porra_id, user_id, total_points, total_points_groups, total_points_playoffs, points_golden_boot'),
+      admin.from('matches').select(`
+        id, phase, match_number, group_letter, kickoff_at, venue, city, status,
+        home_goals_ft, away_goals_ft, home_goals_aet, away_goals_aet, home_goals_pen, away_goals_pen,
+        result_ft, last_synced_at,
+        home_team:teams!matches_home_team_id_fkey(name, name_es, short_code),
+        away_team:teams!matches_away_team_id_fkey(name, name_es, short_code)
+      `).order('kickoff_at', { ascending: true }),
+      admin.from('sync_logs').select('*').order('synced_at', { ascending: false }).limit(30),
+      admin.from('golden_boot_predictions').select(`
+        id, user_id, player_name, is_locked, created_at,
+        profile:profiles(display_name),
+        team:teams(name_es, name)
+      `).order('created_at'),
+      admin.auth.admin.listUsers({ perPage: 200 }),
+    ])
+
+    profiles = profilesRes.data as any[] ?? []
+    scores = scoresRes.data as any[] ?? []
+    matches = matchesRes.data as any[] ?? []
+    syncLogs = syncLogsRes.data as any[] ?? []
+    goldenBoot = goldenBootRes.data as any[] ?? []
+    authUsers = authUsersRes.data?.users ?? []
+  } catch (err) {
+    console.error('[admin] Error fetching data:', err)
+  }
 
   // Aggregate scores across all porras per user
   const scoreMap = new Map<string, { total_points: number; total_points_groups: number; total_points_playoffs: number; points_golden_boot: number }>()
