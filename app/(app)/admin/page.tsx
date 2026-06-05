@@ -27,7 +27,7 @@ export default async function AdminPage() {
       goldenBootRes,
       authUsersRes,
     ] = await Promise.all([
-      admin.from('profiles').select('id, display_name, avatar_url').order('display_name'),
+      admin.from('profiles').select('id, display_name, avatar_url, role').order('display_name'),
       admin.from('scores').select('porra_id, user_id, total_points, total_points_groups, total_points_playoffs, points_golden_boot'),
       admin.from('matches').select(`
         id, phase, match_number, group_letter, kickoff_at, venue, city, status,
@@ -73,6 +73,7 @@ export default async function AdminPage() {
     email: emailMap.get(p.id) ?? '',
     display_name: p.display_name,
     avatar_url: p.avatar_url,
+    role: (p.role ?? 'participant') as 'participant' | 'admin',
     total_points: scoreMap.get(p.id)?.total_points ?? 0,
     total_points_groups: scoreMap.get(p.id)?.total_points_groups ?? 0,
     total_points_playoffs: scoreMap.get(p.id)?.total_points_playoffs ?? 0,
@@ -116,6 +117,7 @@ export default async function AdminPage() {
       matches={formattedMatches}
       syncLogs={syncLogs}
       goldenBootPredictions={formattedGoldenBoot}
+      currentUserId={user.id}
     />
   )
 }

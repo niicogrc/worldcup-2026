@@ -12,6 +12,7 @@ interface UserRow {
   email: string
   display_name: string
   avatar_url: string | null
+  role: 'participant' | 'admin'
   total_points: number
   total_points_groups: number
   total_points_playoffs: number
@@ -65,6 +66,7 @@ interface Props {
   matches: MatchRow[]
   syncLogs: SyncLog[]
   goldenBootPredictions: GoldenBootPrediction[]
+  currentUserId: string
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -162,10 +164,11 @@ function Toast({ message, type }: { message: string; type: 'ok' | 'err' }) {
 
 // ─── Tab: Usuarios ────────────────────────────────────────────────────────────
 
-function TabUsuarios({ users, onToast }: { users: UserRow[]; onToast: (msg: string, type: 'ok' | 'err') => void }) {
+function TabUsuarios({ users, currentUserId, onToast }: { users: UserRow[]; currentUserId: string; onToast: (msg: string, type: 'ok' | 'err') => void }) {
   const router = useRouter()
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [changingRoleId, setChangingRoleId] = useState<string | null>(null)
 
   const handleDelete = async (id: string, name: string) => {
     setDeletingId(id)
@@ -183,6 +186,25 @@ function TabUsuarios({ users, onToast }: { users: UserRow[]; onToast: (msg: stri
     }
   }
 
+  const handleRoleChange = async (id: string, name: string, role: 'participant' | 'admin') => {
+    setChangingRoleId(id)
+    try {
+      const res = await fetch(`/api/admin/users/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error desconocido')
+      onToast(`Rol de "${name}" cambiado a ${role}`, 'ok')
+      router.refresh()
+    } catch (e: any) {
+      onToast(e.message, 'err')
+    } finally {
+      setChangingRoleId(null)
+    }
+  }
+
   return (
     <div>
       <p className="text-zinc-400 text-sm mb-4">{users.length} participantes registrados</p>
@@ -197,6 +219,7 @@ function TabUsuarios({ users, onToast }: { users: UserRow[]; onToast: (msg: stri
               <th className="text-right px-4 py-3">Playoffs</th>
               <th className="text-right px-4 py-3">Bota de Oro</th>
               <th className="text-right px-4 py-3 font-bold text-white">Total</th>
+              <th className="text-left px-4 py-3">Rol</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -216,6 +239,28 @@ function TabUsuarios({ users, onToast }: { users: UserRow[]; onToast: (msg: stri
                 <td className="px-4 py-3 text-right text-zinc-300">{u.total_points_playoffs}</td>
                 <td className="px-4 py-3 text-right text-zinc-300">{u.points_golden_boot}</td>
                 <td className="px-4 py-3 text-right text-blue-400 font-bold text-base">{u.total_points}</td>
+                <td className="px-4 py-3">
+                  {u.id === currentUserId ? (
+                    <span className="text-xs text-zinc-500">—</span>
+                  ) : (
+                    <div className="relative">
+                      {changingRoleId === u.id && (
+                        <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none">
+                          <Loader2 className="w-3 h-3 animate-spin text-zinc-400" />
+                        </div>
+                      )}
+                      <select
+                        value={u.role}
+                        disabled={changingRoleId === u.id}
+                        onChange={e => handleRoleChange(u.id, u.display_name, e.target.value as 'participant' | 'admin')}
+                        className="bg-[#1f2333] border border-[#2a2f42] text-white text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500 cursor-pointer disabled:opacity-50"
+                      >
+                        <option value="participant">Participante</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-right">
                   {confirmId === u.id ? (
                     <div className="flex items-center justify-end gap-2">
@@ -695,7 +740,7 @@ const TABS: { id: Tab; label: string; icon: React.FC<{ className?: string }> }[]
   { id: 'bota', label: 'Bota de Oro', icon: Award },
 ]
 
-export default function AdminClient({ users, matches, syncLogs, goldenBootPredictions }: Props) {
+export default function AdminClient({ users, matches, syncLogs, goldenBootPredictions, currentUserId }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('usuarios')
   const [toast, setToast] = useState<{ message: string; type: 'ok' | 'err' } | null>(null)
@@ -777,7 +822,7 @@ export default function AdminClient({ users, matches, syncLogs, goldenBootPredic
       </div>
 
       {/* Tab content */}
-      {tab === 'usuarios' && <TabUsuarios users={users} onToast={showToast} />}
+      {tab === 'usuarios' && <TabUsuarios users={users} currentUserId={currentUserId} onToast={showToast} />}
       {tab === 'partidos' && (
         <TabPartidos
           matches={matches}
