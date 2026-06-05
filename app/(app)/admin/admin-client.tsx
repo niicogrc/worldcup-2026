@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { RefreshCw, Users, Calendar, Activity, Award, ChevronDown, ChevronUp, Check, X, AlertTriangle, Loader2, Trash2, Trophy } from 'lucide-react'
+import { RefreshCw, Users, Calendar, Activity, Award, ChevronDown, ChevronUp, Check, X, AlertTriangle, Loader2, Trash2, BarChart2, Trophy } from 'lucide-react'
 import { clsx } from 'clsx'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -12,10 +12,18 @@ interface UserRow {
   email: string
   display_name: string
   avatar_url: string | null
+  role: 'participant' | 'admin'
   total_points: number
   total_points_groups: number
   total_points_playoffs: number
   points_golden_boot: number
+}
+
+interface TeamOption {
+  id: string
+  name: string
+  name_es: string | null
+  short_code: string | null
 }
 
 interface MatchRow {
@@ -35,6 +43,8 @@ interface MatchRow {
   away_goals_pen: number | null
   result_ft: string | null
   last_synced_at: string | null
+  home_team_id: string | null
+  away_team_id: string | null
   home_team: { name: string; name_es: string | null; short_code: string | null } | null
   away_team: { name: string; name_es: string | null; short_code: string | null } | null
 }
@@ -74,6 +84,8 @@ interface Props {
   syncLogs: SyncLog[]
   goldenBootPredictions: GoldenBootPrediction[]
   porras: PorraRow[]
+  teams: TeamOption[]
+  currentUserId: string
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -171,10 +183,11 @@ function Toast({ message, type }: { message: string; type: 'ok' | 'err' }) {
 
 // ─── Tab: Usuarios ────────────────────────────────────────────────────────────
 
-function TabUsuarios({ users, onToast }: { users: UserRow[]; onToast: (msg: string, type: 'ok' | 'err') => void }) {
+function TabUsuarios({ users, currentUserId, onToast }: { users: UserRow[]; currentUserId: string; onToast: (msg: string, type: 'ok' | 'err') => void }) {
   const router = useRouter()
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [changingRoleId, setChangingRoleId] = useState<string | null>(null)
 
   const handleDelete = async (id: string, name: string) => {
     setDeletingId(id)
@@ -192,6 +205,25 @@ function TabUsuarios({ users, onToast }: { users: UserRow[]; onToast: (msg: stri
     }
   }
 
+  const handleRoleChange = async (id: string, name: string, role: 'participant' | 'admin') => {
+    setChangingRoleId(id)
+    try {
+      const res = await fetch(`/api/admin/users/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error desconocido')
+      onToast(`Rol de "${name}" cambiado a ${role}`, 'ok')
+      router.refresh()
+    } catch (e: any) {
+      onToast(e.message, 'err')
+    } finally {
+      setChangingRoleId(null)
+    }
+  }
+
   return (
     <div>
       <p className="text-zinc-400 text-sm mb-4">{users.length} participantes registrados</p>
@@ -206,6 +238,7 @@ function TabUsuarios({ users, onToast }: { users: UserRow[]; onToast: (msg: stri
               <th className="text-right px-4 py-3">Playoffs</th>
               <th className="text-right px-4 py-3">Bota de Oro</th>
               <th className="text-right px-4 py-3 font-bold text-white">Total</th>
+              <th className="text-left px-4 py-3">Rol</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -225,6 +258,28 @@ function TabUsuarios({ users, onToast }: { users: UserRow[]; onToast: (msg: stri
                 <td className="px-4 py-3 text-right text-zinc-300">{u.total_points_playoffs}</td>
                 <td className="px-4 py-3 text-right text-zinc-300">{u.points_golden_boot}</td>
                 <td className="px-4 py-3 text-right text-blue-400 font-bold text-base">{u.total_points}</td>
+                <td className="px-4 py-3">
+                  {u.id === currentUserId ? (
+                    <span className="text-xs text-zinc-500">—</span>
+                  ) : (
+                    <div className="relative">
+                      {changingRoleId === u.id && (
+                        <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none">
+                          <Loader2 className="w-3 h-3 animate-spin text-zinc-400" />
+                        </div>
+                      )}
+                      <select
+                        value={u.role}
+                        disabled={changingRoleId === u.id}
+                        onChange={e => handleRoleChange(u.id, u.display_name, e.target.value as 'participant' | 'admin')}
+                        className="bg-[#1f2333] border border-[#2a2f42] text-white text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500 cursor-pointer disabled:opacity-50"
+                      >
+                        <option value="participant">Participante</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-right">
                   {confirmId === u.id ? (
                     <div className="flex items-center justify-end gap-2">
@@ -265,7 +320,7 @@ function TabUsuarios({ users, onToast }: { users: UserRow[]; onToast: (msg: stri
 
 // ─── Tab: Partidos ────────────────────────────────────────────────────────────
 
-function MatchEditRow({ match, onSaved, onError }: { match: MatchRow; onSaved: () => void; onError: (msg: string) => void }) {
+function MatchEditRow({ match, teams, onSaved, onError }: { match: MatchRow; teams: TeamOption[]; onSaved: () => void; onError: (msg: string) => void }) {
   const [expanded, setExpanded] = useState(false)
   const [homeGoals, setHomeGoals] = useState(match.home_goals_ft?.toString() ?? '')
   const [awayGoals, setAwayGoals] = useState(match.away_goals_ft?.toString() ?? '')
@@ -274,14 +329,17 @@ function MatchEditRow({ match, onSaved, onError }: { match: MatchRow; onSaved: (
   const [homePen, setHomePen] = useState(match.home_goals_pen?.toString() ?? '')
   const [awayPen, setAwayPen] = useState(match.away_goals_pen?.toString() ?? '')
   const [status, setStatus] = useState(match.status)
+  const [homeTeamId, setHomeTeamId] = useState(match.home_team_id ?? '')
+  const [awayTeamId, setAwayTeamId] = useState(match.away_team_id ?? '')
   const [saving, setSaving] = useState(false)
 
+  const isKnockout = match.phase !== 'group'
   const hasResult = match.result_ft !== null
 
   const handleSave = async () => {
     setSaving(true)
     try {
-      await apiFetch('/api/admin/match-result', {
+      const body: Record<string, unknown> = {
         match_id: match.id,
         status,
         home_goals_ft: homeGoals === '' ? null : homeGoals,
@@ -290,7 +348,12 @@ function MatchEditRow({ match, onSaved, onError }: { match: MatchRow; onSaved: (
         away_goals_aet: awayAet === '' ? null : awayAet,
         home_goals_pen: homePen === '' ? null : homePen,
         away_goals_pen: awayPen === '' ? null : awayPen,
-      })
+      }
+      if (isKnockout) {
+        body.home_team_id = homeTeamId === '' ? null : homeTeamId
+        body.away_team_id = awayTeamId === '' ? null : awayTeamId
+      }
+      await apiFetch('/api/admin/match-result', body)
       setExpanded(false)
       onSaved()
     } catch (e: any) {
@@ -335,6 +398,38 @@ function MatchEditRow({ match, onSaved, onError }: { match: MatchRow; onSaved: (
       {expanded && (
         <div className="px-4 pb-4 bg-[#0f1118]">
           <div className="pt-3 flex flex-wrap gap-3 items-end">
+            {/* Team selectors — knockout phases only */}
+            {isKnockout && (
+              <>
+                <div className="flex flex-col gap-1">
+                  <label className="text-zinc-500 text-xs uppercase">Equipo local</label>
+                  <select
+                    value={homeTeamId}
+                    onChange={e => setHomeTeamId(e.target.value)}
+                    className="bg-[#1f2333] border border-[#2a2f42] text-white text-sm rounded-lg px-3 py-2 cursor-pointer focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">— TBD —</option>
+                    {teams.map(t => (
+                      <option key={t.id} value={t.id}>{t.name_es ?? t.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-zinc-500 text-xs uppercase">Equipo visitante</label>
+                  <select
+                    value={awayTeamId}
+                    onChange={e => setAwayTeamId(e.target.value)}
+                    className="bg-[#1f2333] border border-[#2a2f42] text-white text-sm rounded-lg px-3 py-2 cursor-pointer focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">— TBD —</option>
+                    {teams.map(t => (
+                      <option key={t.id} value={t.id}>{t.name_es ?? t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
+
             {/* Status */}
             <div className="flex flex-col gap-1">
               <label className="text-zinc-500 text-xs uppercase">Estado</label>
@@ -416,7 +511,7 @@ function MatchEditRow({ match, onSaved, onError }: { match: MatchRow; onSaved: (
   )
 }
 
-function TabPartidos({ matches, onSaved, onError }: { matches: MatchRow[]; onSaved: () => void; onError: (msg: string) => void }) {
+function TabPartidos({ matches, teams, onSaved, onError }: { matches: MatchRow[]; teams: TeamOption[]; onSaved: () => void; onError: (msg: string) => void }) {
   const [filterPhase, setFilterPhase] = useState<string>('all')
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set(['group']))
@@ -489,7 +584,7 @@ function TabPartidos({ matches, onSaved, onError }: { matches: MatchRow[]; onSav
             {expandedPhases.has(phase) && (
               <div>
                 {phaseMatches.map(m => (
-                  <MatchEditRow key={m.id} match={m} onSaved={onSaved} onError={onError} />
+                  <MatchEditRow key={m.id} match={m} teams={teams} onSaved={onSaved} onError={onError} />
                 ))}
               </div>
             )}
@@ -693,6 +788,128 @@ function TabBotaDeOro({ predictions, onToast }: { predictions: GoldenBootPredict
   )
 }
 
+// ─── Tab: Stats ───────────────────────────────────────────────────────────────
+
+interface PorraStats {
+  id: string
+  name: string
+  total_members: number
+  members_with_all_predictions: number
+  members_with_golden_boot: number
+  total_predictions: number
+  total_possible: number
+  completion_pct: number
+}
+
+interface GlobalStats {
+  total_users: number
+  total_predictions: number
+  matches_with_result: number
+  matches_total: number
+}
+
+interface StatsData {
+  porras: PorraStats[]
+  global: GlobalStats
+}
+
+function TabStats({ onToast }: { onToast: (msg: string, type: 'ok' | 'err') => void }) {
+  const [data, setData] = useState<StatsData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/admin/stats')
+      .then(res => res.json())
+      .then(json => {
+        if (json.error) throw new Error(json.error)
+        setData(json)
+      })
+      .catch((e: any) => onToast(e.message, 'err'))
+      .finally(() => setLoading(false))
+  }, [onToast])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-5 h-5 animate-spin text-zinc-500" />
+      </div>
+    )
+  }
+
+  if (!data) return null
+
+  const { global, porras } = data
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Usuarios registrados', value: global.total_users },
+          { label: 'Predicciones totales', value: global.total_predictions },
+          { label: 'Partidos con resultado', value: `${global.matches_with_result} / ${global.matches_total}` },
+          { label: 'Partidos restantes', value: global.matches_total - global.matches_with_result },
+        ].map(s => (
+          <div key={s.label} className="bg-[#13151c] border border-[#1f2333] rounded-xl px-4 py-3">
+            <p className="text-2xl font-bold text-white">{s.value}</p>
+            <p className="text-xs text-zinc-500 mt-0.5">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-3">
+        {porras.map(porra => {
+          const fillColor = porra.completion_pct >= 80 ? 'bg-green-500' : 'bg-blue-500'
+          return (
+            <div key={porra.id} className="bg-[#13151c] border border-[#1f2333] rounded-xl p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-white font-semibold text-sm">{porra.name}</h3>
+                <span className="text-zinc-400 text-xs">{porra.total_members} miembros</span>
+              </div>
+
+              <div className="mb-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-zinc-500 text-xs">Completitud de predicciones</span>
+                  <span className="text-zinc-300 text-xs font-mono">{porra.completion_pct}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-[#1f2333] overflow-hidden">
+                  <div
+                    className={clsx('h-full rounded-full transition-all', fillColor)}
+                    style={{ width: `${Math.min(porra.completion_pct, 100)}%` }}
+                  />
+                </div>
+                <p className="text-zinc-600 text-xs mt-1">
+                  {porra.total_predictions} de {porra.total_possible} predicciones posibles
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-[#0c0d12] rounded-lg px-3 py-2.5">
+                  <p className="text-white font-semibold text-sm">
+                    {porra.members_with_all_predictions}
+                    <span className="text-zinc-500 font-normal"> / {porra.total_members}</span>
+                  </p>
+                  <p className="text-zinc-500 text-xs mt-0.5">Predicciones completas (104)</p>
+                </div>
+                <div className="bg-[#0c0d12] rounded-lg px-3 py-2.5">
+                  <p className="text-white font-semibold text-sm">
+                    {porra.members_with_golden_boot}
+                    <span className="text-zinc-500 font-normal"> / {porra.total_members}</span>
+                  </p>
+                  <p className="text-zinc-500 text-xs mt-0.5">Con Bota de Oro</p>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+
+        {porras.length === 0 && (
+          <p className="text-zinc-500 text-sm text-center py-8">Sin porras</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Tab: Porras ──────────────────────────────────────────────────────────────
 
 function TabPorras({ porras, onToast }: { porras: PorraRow[]; onToast: (msg: string, type: 'ok' | 'err') => void }) {
@@ -807,7 +1024,7 @@ function TabPorras({ porras, onToast }: { porras: PorraRow[]; onToast: (msg: str
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-type Tab = 'usuarios' | 'partidos' | 'sync' | 'bota' | 'porras'
+type Tab = 'usuarios' | 'partidos' | 'sync' | 'bota' | 'porras' | 'stats'
 
 const TABS: { id: Tab; label: string; icon: React.FC<{ className?: string }> }[] = [
   { id: 'usuarios', label: 'Usuarios', icon: Users },
@@ -815,9 +1032,10 @@ const TABS: { id: Tab; label: string; icon: React.FC<{ className?: string }> }[]
   { id: 'sync', label: 'Sync', icon: Activity },
   { id: 'bota', label: 'Bota de Oro', icon: Award },
   { id: 'porras', label: 'Porras', icon: Trophy },
+  { id: 'stats', label: 'Stats', icon: BarChart2 },
 ]
 
-export default function AdminClient({ users, matches, syncLogs, goldenBootPredictions, porras }: Props) {
+export default function AdminClient({ users, matches, syncLogs, goldenBootPredictions, porras, teams, currentUserId }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('usuarios')
   const [toast, setToast] = useState<{ message: string; type: 'ok' | 'err' } | null>(null)
@@ -900,10 +1118,11 @@ export default function AdminClient({ users, matches, syncLogs, goldenBootPredic
       </div>
 
       {/* Tab content */}
-      {tab === 'usuarios' && <TabUsuarios users={users} onToast={showToast} />}
+      {tab === 'usuarios' && <TabUsuarios users={users} currentUserId={currentUserId} onToast={showToast} />}
       {tab === 'partidos' && (
         <TabPartidos
           matches={matches}
+          teams={teams}
           onSaved={handleSaved}
           onError={msg => showToast(msg, 'err')}
         />
@@ -911,6 +1130,7 @@ export default function AdminClient({ users, matches, syncLogs, goldenBootPredic
       {tab === 'sync' && <TabSync syncLogs={syncLogs} onToast={showToast} />}
       {tab === 'bota' && <TabBotaDeOro predictions={goldenBootPredictions} onToast={showToast} />}
       {tab === 'porras' && <TabPorras porras={porras} onToast={showToast} />}
+      {tab === 'stats' && <TabStats onToast={showToast} />}
 
       {/* Toast */}
       {toast && <Toast message={toast.message} type={toast.type} />}
