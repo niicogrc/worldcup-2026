@@ -18,6 +18,8 @@ export default async function AdminPage() {
   let goldenBoot: any[] = []
   let authUsers: any[] = []
   let teams: any[] = []
+  let porrasRaw: any[] = []
+  let porraMembers: any[] = []
 
   try {
     const [
@@ -28,6 +30,8 @@ export default async function AdminPage() {
       goldenBootRes,
       authUsersRes,
       teamsRes,
+      porrasRes,
+      porraMembersRes,
     ] = await Promise.all([
       admin.from('profiles').select('id, display_name, avatar_url, role').order('display_name'),
       admin.from('scores').select('porra_id, user_id, total_points, total_points_groups, total_points_playoffs, points_golden_boot'),
@@ -45,8 +49,10 @@ export default async function AdminPage() {
         profile:profiles(display_name),
         team:teams(name_es, name)
       `).order('created_at'),
-      admin.auth.admin.listUsers({ perPage: 200 }),
+      admin.auth.admin.listUsers({ perPage: 500 }),
       admin.from('teams').select('id, name, name_es, short_code').order('name_es', { ascending: true, nullsFirst: false }),
+      (admin as any).from('porras').select('id, name, created_at').order('created_at', { ascending: true }),
+      (admin as any).from('porra_members').select('porra_id, user_id, profiles:user_id(id, display_name)'),
     ])
 
     profiles = profilesRes.data as any[] ?? []
@@ -56,6 +62,8 @@ export default async function AdminPage() {
     goldenBoot = goldenBootRes.data as any[] ?? []
     authUsers = authUsersRes.data?.users ?? []
     teams = teamsRes.data as any[] ?? []
+    porrasRaw = porrasRes.data as any[] ?? []
+    porraMembers = porraMembersRes.data as any[] ?? []
   } catch (err) {
     console.error('[admin] Error fetching data:', err)
   }
@@ -71,7 +79,28 @@ export default async function AdminPage() {
       points_golden_boot: Math.max(prev.points_golden_boot, s.points_golden_boot ?? 0),
     })
   }
-  const emailMap = new Map(authUsers.map(u => [u.id, u.email ?? '']))
+  const emailMap = new Map(authUsers.map((u: any) => [u.id, u.email ?? '']))
+
+  const membersByPorra = new Map<string, { id: string; display_name: string; email: string }[]>()
+  for (const m of porraMembers) {
+    const profile = m.profiles as any
+    if (!profile) continue
+    const list = membersByPorra.get(m.porra_id) ?? []
+    list.push({
+      id: profile.id,
+      display_name: profile.display_name ?? '—',
+      email: emailMap.get(profile.id) ?? '',
+    })
+    membersByPorra.set(m.porra_id, list)
+  }
+
+  const porras = porrasRaw.map((p: any) => ({
+    id: p.id,
+    name: p.name,
+    created_at: p.created_at,
+    member_count: (membersByPorra.get(p.id) ?? []).length,
+    members: membersByPorra.get(p.id) ?? [],
+  }))
 
   const users = profiles.map(p => ({
     id: p.id,
@@ -124,6 +153,7 @@ export default async function AdminPage() {
       matches={formattedMatches}
       syncLogs={syncLogs}
       goldenBootPredictions={formattedGoldenBoot}
+      porras={porras}
       teams={teams}
       currentUserId={user.id}
     />
