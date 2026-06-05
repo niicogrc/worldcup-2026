@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { match_id, home_goals_ft, away_goals_ft, home_goals_aet, away_goals_aet, home_goals_pen, away_goals_pen, status } = body
+  const { match_id, home_goals_ft, away_goals_ft, home_goals_aet, away_goals_aet, home_goals_pen, away_goals_pen, status, home_team_id, away_team_id } = body
 
   if (!match_id || status === undefined) {
     return NextResponse.json({ error: 'Faltan campos requeridos' }, { status: 400 })
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
 
   const toNum = (v: unknown) => (v === '' || v === null || v === undefined) ? null : Number(v)
 
-  const update = {
+  const update: Record<string, unknown> = {
     status,
     home_goals_ft: toNum(home_goals_ft),
     away_goals_ft: toNum(away_goals_ft),
@@ -28,6 +28,9 @@ export async function POST(req: NextRequest) {
     home_goals_pen: toNum(home_goals_pen),
     away_goals_pen: toNum(away_goals_pen),
   }
+
+  if ('home_team_id' in body) update.home_team_id = home_team_id || null
+  if ('away_team_id' in body) update.away_team_id = away_team_id || null
 
   const db = createAdminClient() as any
 

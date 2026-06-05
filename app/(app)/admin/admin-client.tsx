@@ -19,6 +19,13 @@ interface UserRow {
   points_golden_boot: number
 }
 
+interface TeamOption {
+  id: string
+  name: string
+  name_es: string | null
+  short_code: string | null
+}
+
 interface MatchRow {
   id: string
   phase: string
@@ -36,6 +43,8 @@ interface MatchRow {
   away_goals_pen: number | null
   result_ft: string | null
   last_synced_at: string | null
+  home_team_id: string | null
+  away_team_id: string | null
   home_team: { name: string; name_es: string | null; short_code: string | null } | null
   away_team: { name: string; name_es: string | null; short_code: string | null } | null
 }
@@ -66,6 +75,7 @@ interface Props {
   matches: MatchRow[]
   syncLogs: SyncLog[]
   goldenBootPredictions: GoldenBootPrediction[]
+  teams: TeamOption[]
   currentUserId: string
 }
 
@@ -301,7 +311,7 @@ function TabUsuarios({ users, currentUserId, onToast }: { users: UserRow[]; curr
 
 // ─── Tab: Partidos ────────────────────────────────────────────────────────────
 
-function MatchEditRow({ match, onSaved, onError }: { match: MatchRow; onSaved: () => void; onError: (msg: string) => void }) {
+function MatchEditRow({ match, teams, onSaved, onError }: { match: MatchRow; teams: TeamOption[]; onSaved: () => void; onError: (msg: string) => void }) {
   const [expanded, setExpanded] = useState(false)
   const [homeGoals, setHomeGoals] = useState(match.home_goals_ft?.toString() ?? '')
   const [awayGoals, setAwayGoals] = useState(match.away_goals_ft?.toString() ?? '')
@@ -310,14 +320,17 @@ function MatchEditRow({ match, onSaved, onError }: { match: MatchRow; onSaved: (
   const [homePen, setHomePen] = useState(match.home_goals_pen?.toString() ?? '')
   const [awayPen, setAwayPen] = useState(match.away_goals_pen?.toString() ?? '')
   const [status, setStatus] = useState(match.status)
+  const [homeTeamId, setHomeTeamId] = useState(match.home_team_id ?? '')
+  const [awayTeamId, setAwayTeamId] = useState(match.away_team_id ?? '')
   const [saving, setSaving] = useState(false)
 
+  const isKnockout = match.phase !== 'group'
   const hasResult = match.result_ft !== null
 
   const handleSave = async () => {
     setSaving(true)
     try {
-      await apiFetch('/api/admin/match-result', {
+      const body: Record<string, unknown> = {
         match_id: match.id,
         status,
         home_goals_ft: homeGoals === '' ? null : homeGoals,
@@ -326,7 +339,12 @@ function MatchEditRow({ match, onSaved, onError }: { match: MatchRow; onSaved: (
         away_goals_aet: awayAet === '' ? null : awayAet,
         home_goals_pen: homePen === '' ? null : homePen,
         away_goals_pen: awayPen === '' ? null : awayPen,
-      })
+      }
+      if (isKnockout) {
+        body.home_team_id = homeTeamId === '' ? null : homeTeamId
+        body.away_team_id = awayTeamId === '' ? null : awayTeamId
+      }
+      await apiFetch('/api/admin/match-result', body)
       setExpanded(false)
       onSaved()
     } catch (e: any) {
@@ -371,6 +389,38 @@ function MatchEditRow({ match, onSaved, onError }: { match: MatchRow; onSaved: (
       {expanded && (
         <div className="px-4 pb-4 bg-[#0f1118]">
           <div className="pt-3 flex flex-wrap gap-3 items-end">
+            {/* Team selectors — knockout phases only */}
+            {isKnockout && (
+              <>
+                <div className="flex flex-col gap-1">
+                  <label className="text-zinc-500 text-xs uppercase">Equipo local</label>
+                  <select
+                    value={homeTeamId}
+                    onChange={e => setHomeTeamId(e.target.value)}
+                    className="bg-[#1f2333] border border-[#2a2f42] text-white text-sm rounded-lg px-3 py-2 cursor-pointer focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">— TBD —</option>
+                    {teams.map(t => (
+                      <option key={t.id} value={t.id}>{t.name_es ?? t.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-zinc-500 text-xs uppercase">Equipo visitante</label>
+                  <select
+                    value={awayTeamId}
+                    onChange={e => setAwayTeamId(e.target.value)}
+                    className="bg-[#1f2333] border border-[#2a2f42] text-white text-sm rounded-lg px-3 py-2 cursor-pointer focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">— TBD —</option>
+                    {teams.map(t => (
+                      <option key={t.id} value={t.id}>{t.name_es ?? t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
+
             {/* Status */}
             <div className="flex flex-col gap-1">
               <label className="text-zinc-500 text-xs uppercase">Estado</label>
@@ -452,7 +502,7 @@ function MatchEditRow({ match, onSaved, onError }: { match: MatchRow; onSaved: (
   )
 }
 
-function TabPartidos({ matches, onSaved, onError }: { matches: MatchRow[]; onSaved: () => void; onError: (msg: string) => void }) {
+function TabPartidos({ matches, teams, onSaved, onError }: { matches: MatchRow[]; teams: TeamOption[]; onSaved: () => void; onError: (msg: string) => void }) {
   const [filterPhase, setFilterPhase] = useState<string>('all')
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set(['group']))
@@ -525,7 +575,7 @@ function TabPartidos({ matches, onSaved, onError }: { matches: MatchRow[]; onSav
             {expandedPhases.has(phase) && (
               <div>
                 {phaseMatches.map(m => (
-                  <MatchEditRow key={m.id} match={m} onSaved={onSaved} onError={onError} />
+                  <MatchEditRow key={m.id} match={m} teams={teams} onSaved={onSaved} onError={onError} />
                 ))}
               </div>
             )}
@@ -863,7 +913,7 @@ const TABS: { id: Tab; label: string; icon: React.FC<{ className?: string }> }[]
   { id: 'stats', label: 'Stats', icon: BarChart2 },
 ]
 
-export default function AdminClient({ users, matches, syncLogs, goldenBootPredictions, currentUserId }: Props) {
+export default function AdminClient({ users, matches, syncLogs, goldenBootPredictions, teams, currentUserId }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('usuarios')
   const [toast, setToast] = useState<{ message: string; type: 'ok' | 'err' } | null>(null)
@@ -949,6 +999,7 @@ export default function AdminClient({ users, matches, syncLogs, goldenBootPredic
       {tab === 'partidos' && (
         <TabPartidos
           matches={matches}
+          teams={teams}
           onSaved={handleSaved}
           onError={msg => showToast(msg, 'err')}
         />
