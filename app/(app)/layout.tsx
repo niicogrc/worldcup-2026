@@ -16,38 +16,45 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+  let profile: any = null
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .maybeSingle()
+    profile = data
+  } catch { /* profile stays null */ }
 
-  const displayName = (profile as any)?.display_name || user.email?.split('@')[0] || 'Usuario'
-  const avatarUrl = (profile as any)?.avatar_url || `https://api.dicebear.com/7.x/thumbs/svg?seed=${displayName}&backgroundColor=1f2333`
+  const displayName = profile?.display_name || user.email?.split('@')[0] || 'Usuario'
+  const avatarUrl = profile?.avatar_url || `https://api.dicebear.com/7.x/thumbs/svg?seed=${displayName}&backgroundColor=1f2333`
   const admin = isAdmin(user.email)
 
   let activePorra: { id: string; name: string } | null = null
   let porras: { id: string; name: string }[] = []
 
-  if (admin) {
-    // Admin sees ALL porras in the selector
-    const { data: allPorras } = await (supabase as any)
-      .from('porras')
-      .select('id, name')
-      .order('created_at', { ascending: true })
+  try {
+    if (admin) {
+      const { data: allPorras } = await (supabase as any)
+        .from('porras')
+        .select('id, name')
+        .order('created_at', { ascending: true })
+      porras = allPorras ?? []
+    } else {
+      const { data: memberships } = await (supabase as any)
+        .from('porra_members')
+        .select('porra_id, porras(id, name)')
+        .eq('user_id', user.id)
+        .order('joined_at', { ascending: true })
 
-    porras = allPorras ?? []
-  } else {
-    // Regular user: only their own porras
-    const { data: memberships } = await (supabase as any)
-      .from('porra_members')
-      .select('porra_id, porras(id, name)')
-      .eq('user_id', user.id)
-      .order('joined_at', { ascending: true })
+      porras = (memberships ?? []).map((m: any) => m.porras).filter(Boolean)
 
-    porras = (memberships ?? []).map((m: any) => m.porras).filter(Boolean)
-
-    if (porras.length === 0) redirect('/onboarding')
+      if (porras.length === 0) redirect('/onboarding')
+    }
+  } catch (err: any) {
+    // If it's a redirect, rethrow it; otherwise fall through with empty porras
+    if (err?.digest?.startsWith('NEXT_REDIRECT')) throw err
+    if (!admin) redirect('/onboarding')
   }
 
   if (porras.length > 0) {

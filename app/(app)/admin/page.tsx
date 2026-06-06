@@ -3,6 +3,8 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { isAdmin } from '@/lib/admin'
 import AdminClient from './admin-client'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AdminPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -52,7 +54,7 @@ export default async function AdminPage() {
       admin.auth.admin.listUsers({ perPage: 500 }),
       admin.from('teams').select('id, name, name_es, short_code').order('name_es', { ascending: true, nullsFirst: false }),
       (admin as any).from('porras').select('id, name, created_at').order('created_at', { ascending: true }),
-      (admin as any).from('porra_members').select('porra_id, user_id, profiles:user_id(id, display_name)'),
+      (admin as any).from('porra_members').select('porra_id, user_id, profiles!user_id(id, display_name)'),
     ])
 
     profiles = profilesRes.data as any[] ?? []
