@@ -7,18 +7,30 @@ export async function GET(request: Request) {
   const code = searchParams.get('code')
   const next = searchParams.get('next') ?? '/'
 
-  if (code) {
+  if (!code) {
+    return NextResponse.redirect(`${origin}/login?error=auth-code-exchange-failed`)
+  }
+
+  try {
     const supabase = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
-    if (!error) {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const db = supabase as any
+
+    if (error) {
+      return NextResponse.redirect(`${origin}/login?error=auth-code-exchange-failed`)
+    }
+
+    const { data } = await supabase.auth.getUser()
+    const user = data?.user
+
+    if (user) {
+      const db = supabase as any
+
+      try {
         const { data: profile } = await db
           .from('profiles')
           .select('avatar_url, role')
           .eq('id', user.id)
-          .single()
+          .maybeSingle()
 
         const updates: Record<string, unknown> = {}
 
@@ -34,13 +46,15 @@ export async function GET(request: Request) {
         if (Object.keys(updates).length > 0) {
           await db.from('profiles').update(updates).eq('id', user.id)
         }
+      } catch {
+        // Profile update is best-effort; continue with redirect
+      }
 
-        // Admin goes straight to the admin panel
-        if (user.email === ADMIN_EMAIL) {
-          return NextResponse.redirect(`${origin}/admin`)
-        }
+      if (user.email === ADMIN_EMAIL) {
+        return NextResponse.redirect(`${origin}/admin`)
+      }
 
-        // Regular users: redirect to onboarding if they have no porra memberships
+      try {
         const { data: memberships } = await db
           .from('porra_members')
           .select('porra_id')
@@ -50,10 +64,14 @@ export async function GET(request: Request) {
         if (!memberships || memberships.length === 0) {
           return NextResponse.redirect(`${origin}/onboarding`)
         }
+      } catch {
+        // If porra_members table doesn't exist yet, send to onboarding
+        return NextResponse.redirect(`${origin}/onboarding`)
       }
-      return NextResponse.redirect(`${origin}${next}`)
     }
-  }
 
-  return NextResponse.redirect(`${origin}/login?error=auth-code-exchange-failed`)
+    return NextResponse.redirect(`${origin}${next}`)
+  } catch {
+    return NextResponse.redirect(`${origin}/login?error=auth-code-exchange-failed`)
+  }
 }
