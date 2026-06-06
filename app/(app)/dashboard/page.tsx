@@ -4,6 +4,8 @@ import { isAdmin } from '@/lib/admin'
 import { redirect } from 'next/navigation'
 import { getActivePorraId } from '@/lib/active-porra'
 import LeaderboardClient from './leaderboard-client'
+import EmptyState from '@/components/ui/empty-state'
+import { DatabaseZap } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +35,13 @@ export default async function DashboardPage() {
 
   if (lbError) {
     console.error('Error fetching leaderboard:', lbError.message)
+    return (
+      <EmptyState
+        title="No se pudo cargar el leaderboard"
+        description="Hubo un problema al obtener la clasificación. Puede que las tablas aún no existan o que el servicio no esté disponible."
+        icon={DatabaseZap}
+      />
+    )
   }
 
   const { data: userScore } = await (supabase as any)
