@@ -4,7 +4,7 @@ import React from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { BarChart2, Calendar, Award, GitMerge, LogOut } from 'lucide-react'
+import { BarChart2, Calendar, Award, GitMerge, LogOut, Users } from 'lucide-react'
 import { clsx } from 'clsx'
 
 interface NavigationProps {
@@ -17,6 +17,7 @@ const links = [
   { href: '/grupos', label: 'Fase de Grupos', icon: Calendar },
   { href: '/playoffs', label: 'Playoffs', icon: GitMerge },
   { href: '/bota-de-oro', label: 'Bota de Oro', icon: Award },
+  { href: '/comparar', label: 'Comparar', icon: Users },
 ]
 
 export default function Navigation({ isMobile = false, isAdmin = false }: NavigationProps) {
