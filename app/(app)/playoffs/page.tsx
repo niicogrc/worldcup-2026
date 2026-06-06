@@ -4,6 +4,8 @@ import { isAdmin } from '@/lib/admin'
 import { redirect } from 'next/navigation'
 import { getActivePorraId } from '@/lib/active-porra'
 import PlayoffsClient from './playoffs-client'
+import EmptyState from '@/components/ui/empty-state'
+import { DatabaseZap } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +30,14 @@ export default async function PlayoffsPage() {
 
   if (matchesError) {
     console.error('Error fetching playoff matches:', matchesError.message)
+    return (
+      <EmptyState
+        title="No se pudieron cargar los playoffs"
+        description="Hubo un problema al obtener los datos de la fase eliminatoria. Puede que las tablas aún no existan o que el servicio no esté disponible."
+        icon={DatabaseZap}
+        action={{ label: 'Volver al leaderboard', href: '/dashboard' }}
+      />
+    )
   }
 
   const { data: predictions } = await (supabase as any)

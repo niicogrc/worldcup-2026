@@ -4,6 +4,8 @@ import { isAdmin } from '@/lib/admin'
 import { redirect } from 'next/navigation'
 import { getActivePorraId } from '@/lib/active-porra'
 import GoldenBootClient from './golden-boot-client'
+import EmptyState from '@/components/ui/empty-state'
+import { DatabaseZap } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,10 +28,22 @@ export default async function GoldenBootPage() {
     .eq('user_id', user.id)
     .maybeSingle()
 
-  const { data: teams } = await supabase
+  const { data: teams, error: teamsError } = await supabase
     .from('teams')
     .select('id, name, short_code, flag_url')
     .order('name', { ascending: true })
+
+  if (teamsError) {
+    console.error('Error fetching teams:', teamsError.message)
+    return (
+      <EmptyState
+        title="No se pudo cargar la Bota de Oro"
+        description="Hubo un problema al obtener los equipos. Puede que las tablas aún no existan o que el servicio no esté disponible."
+        icon={DatabaseZap}
+        action={{ label: 'Volver al leaderboard', href: '/dashboard' }}
+      />
+    )
+  }
 
   const { data: firstMatch } = await supabase
     .from('matches')
