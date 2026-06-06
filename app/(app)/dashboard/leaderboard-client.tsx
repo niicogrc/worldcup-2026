@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Database } from '@/lib/supabase/types'
@@ -96,9 +97,17 @@ export default function LeaderboardClient({ initialLeaderboard, currentUserId, u
                           alt={row.display_name}
                           className={clsx('w-8 h-8 rounded-full bg-[#1f2333] flex-shrink-0', isMe ? 'ring-1 ring-blue-400' : '')}
                         />
-                        <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className={clsx('text-sm font-medium', isMe ? 'text-blue-400' : 'text-white')}>{row.display_name}</span>
-                          {isMe && <span className="ml-1.5 text-[10px] bg-blue-500/15 text-blue-400 px-1.5 py-0.5 rounded font-medium">Tú</span>}
+                          {isMe && <span className="text-[10px] bg-blue-500/15 text-blue-400 px-1.5 py-0.5 rounded font-medium">Tú</span>}
+                          {!isMe && (
+                            <Link
+                              href={`/comparar?a=${currentUserId}&b=${row.user_id}`}
+                              className="text-[10px] text-zinc-500 hover:text-blue-400 transition-colors border border-[#1f2333] hover:border-blue-500/30 px-1.5 py-0.5 rounded font-medium"
+                            >
+                              vs
+                            </Link>
+                          )}
                         </div>
                       </div>
                     </td>
