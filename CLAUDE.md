@@ -276,6 +276,7 @@ Sedes:       16 estadios en USA, México y Canadá (UTC-4 a UTC-7)
 - [x] UI Porra 2 — playoffs / bracket
 - [x] UI Bota de Oro
 - [x] Leaderboard en tiempo real
+- [x] Importar predicciones de otra porra (al crear una porra en onboarding)
 - [ ] Panel admin
 - [ ] Deploy en Vercel
 

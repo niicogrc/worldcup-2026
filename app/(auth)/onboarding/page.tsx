@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Users, ChevronDown, Check, Loader2 } from 'lucide-react'
+import { Plus, Users, ChevronDown, Check, Loader2, Download } from 'lucide-react'
 import { setActivePorra } from '@/app/actions/porra'
 import { clsx } from 'clsx'
 
@@ -24,10 +24,13 @@ export default function OnboardingPage() {
     }
   }, [])
   const [porras, setPorras] = useState<Porra[]>([])
+  const [myPorras, setMyPorras] = useState<Porra[]>([])
   const [selectedPorra, setSelectedPorra] = useState<Porra | null>(null)
+  const [importFrom, setImportFrom] = useState<Porra | null>(null)
   const [newName, setNewName] = useState('')
   const [error, setError] = useState('')
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [importDropdownOpen, setImportDropdownOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   useEffect(() => {
@@ -35,6 +38,11 @@ export default function OnboardingPage() {
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data)) setPorras(data)
+      })
+    fetch('/api/porras?mine=true')
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) setMyPorras(data)
       })
   }, [])
 
@@ -69,6 +77,14 @@ export default function OnboardingPage() {
       if (!res.ok) {
         setError(data.error || 'Error al crear')
         return
+      }
+      if (importFrom) {
+        // La porra ya está creada: si la importación falla, seguimos igualmente
+        await fetch(`/api/porras/${data.id}/import-predictions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sourcePorraId: importFrom.id }),
+        }).catch(() => {})
       }
       await setActivePorra(data.id)
       router.push('/')
@@ -192,7 +208,7 @@ export default function OnboardingPage() {
           <div className="space-y-4">
             <div className="mb-6">
               <button
-                onClick={() => { setStep('choice'); setError(''); setNewName('') }}
+                onClick={() => { setStep('choice'); setError(''); setNewName(''); setImportFrom(null) }}
                 className="text-zinc-500 hover:text-zinc-300 text-sm mb-4 transition-colors cursor-pointer"
               >
                 ← Volver
@@ -213,6 +229,54 @@ export default function OnboardingPage() {
                 className="w-full px-4 py-3 bg-[#13151c] border border-[#1f2333] focus:border-blue-500/60 outline-none text-white placeholder-zinc-600 rounded-xl text-sm transition-colors"
               />
             </div>
+
+            {myPorras.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-2">
+                  Importar predicciones de otra porra <span className="text-zinc-600">(opcional)</span>
+                </label>
+                <div className="relative">
+                  <button
+                    onClick={() => setImportDropdownOpen(o => !o)}
+                    className={clsx(
+                      'w-full flex items-center justify-between gap-3 px-4 py-3 bg-[#13151c] border rounded-xl text-sm transition-all duration-200 cursor-pointer',
+                      importDropdownOpen ? 'border-blue-500/60' : 'border-[#1f2333] hover:border-[#2a2f42]'
+                    )}
+                  >
+                    <span className={clsx('flex items-center gap-2', importFrom ? 'text-white' : 'text-zinc-500')}>
+                      <Download className="w-4 h-4 text-zinc-500" />
+                      {importFrom ? importFrom.name : 'No importar nada'}
+                    </span>
+                    <ChevronDown className={clsx('w-4 h-4 text-zinc-500 transition-transform', importDropdownOpen && 'rotate-180')} />
+                  </button>
+
+                  {importDropdownOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-[#13151c] border border-[#1f2333] rounded-xl overflow-hidden z-10 shadow-xl max-h-64 overflow-y-auto">
+                      <button
+                        onClick={() => { setImportFrom(null); setImportDropdownOpen(false) }}
+                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#191c26] transition-colors text-left cursor-pointer"
+                      >
+                        <p className="text-zinc-400 text-sm">No importar nada</p>
+                        {!importFrom && <Check className="w-4 h-4 text-blue-400" />}
+                      </button>
+                      {myPorras.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => { setImportFrom(p); setImportDropdownOpen(false) }}
+                          className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#191c26] transition-colors text-left cursor-pointer"
+                        >
+                          <p className="text-white text-sm font-medium">{p.name}</p>
+                          {importFrom?.id === p.id && <Check className="w-4 h-4 text-blue-400" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="text-zinc-600 text-xs mt-1.5">
+                  Se copiarán tus pronósticos de partidos que aún no hayan empezado y tu Bota de Oro.
+                </p>
+              </div>
+            )}
 
             {error && <p className="text-red-400 text-sm">{error}</p>}
 

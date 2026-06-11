@@ -2,9 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
 // GET /api/porras — list all porras (public)
-export async function GET() {
+// GET /api/porras?mine=true — only the porras the current user belongs to
+export async function GET(req: NextRequest) {
   try {
     const supabase = await createClient()
+
+    if (req.nextUrl.searchParams.get('mine') === 'true') {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+      const { data, error } = await (supabase as any)
+        .from('porra_members')
+        .select('porras(id, name)')
+        .eq('user_id', user.id)
+
+      if (error) throw error
+      return NextResponse.json((data ?? []).map((m: any) => m.porras).filter(Boolean))
+    }
+
     const { data, error } = await (supabase as any)
       .from('porras')
       .select('id, name, created_at, created_by, profiles:created_by(display_name)')
