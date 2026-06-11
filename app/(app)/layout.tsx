@@ -4,7 +4,6 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { isAdmin } from '@/lib/admin'
-import { setActivePorra } from '@/app/actions/porra'
 import Navigation from './navigation'
 import UserMenu from './user-menu'
 import MobileHeader from './mobile-header'
@@ -51,13 +50,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   if (porras.length > 0) {
+    // No escribir la cookie aquí: los Server Components no pueden modificar cookies
+    // durante el render. Cada página resuelve el mismo fallback vía getActivePorraId(),
+    // y la cookie se escribe al cambiar de porra (Server Action) o al crear/unirse.
     const cookieStore = await cookies()
     const cookiePorraId = cookieStore.get('active_porra_id')?.value
     activePorra = (cookiePorraId && porras.find(p => p.id === cookiePorraId)) || porras[0]
-
-    if (!cookiePorraId || cookiePorraId !== activePorra!.id) {
-      await setActivePorra(activePorra!.id)
-    }
   }
 
   return (

@@ -54,7 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const importable = (sourcePreds ?? []).filter((p: any) => openIds.has(p.match_id))
     const skippedLocked = (sourcePreds ?? []).length - importable.length
 
-    let imported = 0
+    let importedRows: { match_id: string; prediction: string }[] = []
     if (importable.length > 0) {
       // ON CONFLICT DO NOTHING: las predicciones ya hechas en la porra destino se respetan
       const { data: insertedRows, error: insertError } = await (supabase.from('predictions') as any)
@@ -68,10 +68,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           })),
           { onConflict: 'porra_id,user_id,match_id', ignoreDuplicates: true }
         )
-        .select('match_id')
+        .select('match_id, prediction')
 
       if (insertError) throw insertError
-      imported = insertedRows?.length ?? 0
+      importedRows = insertedRows ?? []
     }
 
     // Golden Boot: solo si el torneo no ha empezado y no hay ya una en destino
@@ -111,7 +111,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
-    return NextResponse.json({ imported, skippedLocked, goldenBootImported }, { status: 200 })
+    return NextResponse.json(
+      { imported: importedRows.length, predictions: importedRows, skippedLocked, goldenBootImported },
+      { status: 200 }
+    )
   } catch (error: any) {
     return NextResponse.json({ error: error.message || String(error) }, { status: 500 })
   }

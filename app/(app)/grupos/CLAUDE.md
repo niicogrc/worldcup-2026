@@ -31,6 +31,17 @@ El **Server Component** usa `export const dynamic = 'force-dynamic'` para que Ne
 
 ---
 
+## Banner de importación de predicciones
+
+Si el usuario **no tiene ninguna predicción** en la porra activa pero sí en otra porra suya, `page.tsx` pasa `importablePorras` (otras porras donde tiene predicciones) y el cliente muestra un banner con dos opciones:
+
+- **Importar de {porra}** — llama a `POST /api/porras/{porraId}/import-predictions` con `{ sourcePorraId }`. La respuesta incluye las predicciones insertadas (`predictions[]`), que se mergean en el estado local para reflejarse sin recargar; además se hace `router.refresh()`.
+- **Hacerlas de cero** — oculta el banner (estado local, reaparece al recargar si sigue sin predicciones).
+
+Tras importar se muestra un mensaje verde con el número de predicciones copiadas.
+
+---
+
 ## Cómo funciona la predicción (lógica optimista)
 
 1. El usuario hace click en "1", "X" o "2"

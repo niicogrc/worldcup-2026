@@ -15,7 +15,7 @@ Todas las API Routes del proyecto. Son endpoints HTTP server-side de Next.js —
 | `/api/porras` | `GET` | Cliente (onboarding) | Lista todas las porras públicas; con `?mine=true` solo las del usuario |
 | `/api/porras` | `POST` | Cliente (onboarding) | Crea una nueva porra (el creador es automáticamente miembro) |
 | `/api/porras/[id]/join` | `POST` | Cliente (onboarding, porra-selector) | Únete a una porra existente |
-| `/api/porras/[id]/import-predictions` | `POST` | Cliente (onboarding) | Copia a la porra `[id]` las predicciones del usuario desde otra porra (`sourcePorraId` en body). Solo partidos sin empezar; no sobrescribe; incluye Bota de Oro si el torneo no ha empezado |
+| `/api/porras/[id]/import-predictions` | `POST` | Cliente (onboarding, grupos) | Copia a la porra `[id]` las predicciones del usuario desde otra porra (`sourcePorraId` en body). Solo partidos sin empezar; no sobrescribe; incluye Bota de Oro si el torneo no ha empezado. Devuelve `{ imported, predictions[], skippedLocked, goldenBootImported }` |
 | `/api/porras/[id]/leave` | `POST` | Cliente (configuración) | Abandona una porra |
 | `/api/profile` | `PATCH` | Cliente (perfil) | Actualiza nombre y avatar URL del perfil |
 | `/api/profile/avatar` | `POST` | Cliente (perfil) | Sube imagen a Supabase Storage |
