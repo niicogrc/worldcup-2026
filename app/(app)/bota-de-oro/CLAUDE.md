@@ -95,3 +95,15 @@ La API hace upsert: si ya existe una predicción, la actualiza; si no, la crea. 
 ## Visibilidad
 
 Las predicciones de Bota de Oro son privadas hasta el 11 jun 2026 19:00 UTC. Después, todos ven la predicción de todos (política de RLS en Supabase).
+
+---
+
+## Predicciones de la porra (sidebar)
+
+Card "Predicciones de la porra" que lista a cada miembro de la porra activa con su pick. `page.tsx` fetcha `porra_members` + todas las `golden_boot_predictions` de la porra con el cliente anon — la RLS solo devuelve las ajenas a partir del inicio del torneo, así que antes solo llega la propia. El cliente muestra:
+
+- Pick visible → nombre del jugador + bandera de su selección
+- Otro miembro sin pick visible y torneo sin empezar → candado "Oculta"
+- Torneo empezado y sin fila → "Sin predicción"
+
+El card solo se renderiza si la porra tiene más de un miembro.

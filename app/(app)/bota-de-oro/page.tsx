@@ -54,6 +54,29 @@ export default async function GoldenBootPage() {
 
   const firstMatchKickoff = firstMatch ? (firstMatch as any).kickoff_at : null
 
+  // Predicciones de Bota de Oro de los miembros de la porra. La RLS solo
+  // expone las ajenas a partir del inicio del torneo (11 jun 2026 19:00 UTC),
+  // así que antes de esa fecha aquí solo llega la propia.
+  const { data: memberRows } = await (supabase as any)
+    .from('porra_members')
+    .select('user_id, profiles:user_id(display_name)')
+    .eq('porra_id', porraId)
+
+  const { data: allPicks } = await (supabase as any)
+    .from('golden_boot_predictions')
+    .select('user_id, player_name, team:teams(name)')
+    .eq('porra_id', porraId)
+
+  const memberPicks = (memberRows ?? []).map((m: any) => {
+    const pick = (allPicks ?? []).find((p: any) => p.user_id === m.user_id)
+    return {
+      user_id: m.user_id,
+      display_name: m.profiles?.display_name ?? 'Usuario',
+      player_name: pick?.player_name ?? null,
+      team_name: pick?.team?.name ?? null,
+    }
+  })
+
   return (
     <div className="space-y-6">
       <div>
@@ -66,6 +89,8 @@ export default async function GoldenBootPage() {
         teams={teams || []}
         firstMatchKickoff={firstMatchKickoff}
         porraId={porraId}
+        memberPicks={memberPicks}
+        currentUserId={user.id}
       />
     </div>
   )

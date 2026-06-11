@@ -2,10 +2,12 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Download, Eye, Loader2, Lock, X } from 'lucide-react'
+import { Download, Loader2, Lock, X } from 'lucide-react'
 import { Database, MatchResult } from '@/lib/supabase/types'
 import { getFlagUrl } from '@/lib/flags'
 import { clsx } from 'clsx'
+import { useMemberView, PorraMember } from '@/lib/hooks/use-member-view'
+import MemberViewBar from '@/components/porra/member-view-bar'
 
 type MatchWithTeams = Database['public']['Tables']['matches']['Row'] & {
   home_team: { id: string; name: string; flag_url: string | null; group_letter: string | null; short_code: string | null } | null
@@ -15,9 +17,6 @@ type PredictionRow = Database['public']['Tables']['predictions']['Row']
 type StandingWithTeam = Database['public']['Tables']['group_standings']['Row'] & {
   team: { id: string; name: string; flag_url: string | null; short_code: string | null } | null
 }
-
-type PorraMember = { user_id: string; display_name: string; avatar_url: string | null }
-type ViewedPrediction = { match_id: string; prediction: MatchResult; is_correct: boolean | null; points_awarded: number | null }
 
 interface GroupsClientProps {
   initialMatches: MatchWithTeams[]
@@ -50,45 +49,13 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
   const [importedCount, setImportedCount] = useState<number | null>(null)
 
   // Ver predicciones de otro miembro de la porra (solo lectura)
-  const [viewingUserId, setViewingUserId] = useState<string | null>(null)
-  const [viewedCache, setViewedCache] = useState<Record<string, ViewedPrediction[]>>({})
-  const [loadingMemberId, setLoadingMemberId] = useState<string | null>(null)
-
-  const isViewingOther = viewingUserId !== null && viewingUserId !== currentUserId
-  const viewedMember = isViewingOther ? members.find((m) => m.user_id === viewingUserId) : null
-  const viewedRows = isViewingOther ? (viewedCache[viewingUserId!] ?? []) : []
-  const viewedPredictions = viewedRows.reduce<Record<string, MatchResult>>(
-    (acc, p) => ({ ...acc, [p.match_id]: p.prediction }),
-    {}
-  )
-
-  const otherMembers = members.filter((m) => m.user_id !== currentUserId)
+  const {
+    viewingUserId, isViewingOther, viewedMember, viewedRows, viewedPredictions,
+    loadingMemberId, viewError, viewMember,
+  } = useMemberView(porraId, currentUserId, members)
 
   const groupMatches = initialMatches.filter((m) => m.group_letter === selectedGroup)
   const groupStandings = standings.filter((s) => s.group_letter === selectedGroup)
-
-  const handleViewMember = async (userId: string | null) => {
-    setErrorMsg(null)
-    if (userId === null || userId === currentUserId) {
-      setViewingUserId(null)
-      return
-    }
-    setViewingUserId(userId)
-    if (viewedCache[userId]) return
-
-    setLoadingMemberId(userId)
-    try {
-      const res = await fetch(`/api/porras/${porraId}/predictions?userId=${userId}`)
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Error al cargar las predicciones')
-      setViewedCache((c) => ({ ...c, [userId]: data }))
-    } catch (err: any) {
-      setErrorMsg(err.message)
-      setViewingUserId(null)
-    } finally {
-      setLoadingMemberId(null)
-    }
-  }
 
   const handlePredict = async (matchId: string, choice: MatchResult) => {
     const prev = predictions[matchId]
@@ -151,49 +118,14 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
   return (
     <div className="space-y-6">
       {/* Member viewer */}
-      {otherMembers.length > 0 && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="flex items-center gap-1.5 text-xs text-zinc-500">
-            <Eye className="w-3.5 h-3.5" />
-            Viendo predicciones de
-          </span>
-          <button
-            onClick={() => handleViewMember(null)}
-            className={clsx(
-              'px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer',
-              !isViewingOther
-                ? 'bg-blue-500 text-white shadow-sm shadow-blue-500/20'
-                : 'bg-[#13151c] border border-[#1f2333] text-zinc-400 hover:text-white hover:border-zinc-600'
-            )}
-          >
-            Tú
-          </button>
-          {otherMembers.map((m) => (
-            <button
-              key={m.user_id}
-              onClick={() => handleViewMember(m.user_id)}
-              className={clsx(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer',
-                viewingUserId === m.user_id
-                  ? 'bg-blue-500 text-white shadow-sm shadow-blue-500/20'
-                  : 'bg-[#13151c] border border-[#1f2333] text-zinc-400 hover:text-white hover:border-zinc-600'
-              )}
-            >
-              {loadingMemberId === m.user_id && <Loader2 className="w-3 h-3 animate-spin" />}
-              {m.display_name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {isViewingOther && (
-        <div className="px-4 py-3 bg-blue-500/10 border border-blue-500/20 text-blue-300 rounded-lg text-sm flex items-center gap-2">
-          <Eye className="w-4 h-4 flex-shrink-0" />
-          <span>
-            Estás viendo las predicciones de <strong>{viewedMember?.display_name}</strong>. Solo se muestran las de partidos ya empezados; las demás permanecen ocultas hasta el kick-off.
-          </span>
-        </div>
-      )}
+      <MemberViewBar
+        members={members}
+        currentUserId={currentUserId}
+        viewingUserId={viewingUserId}
+        loadingMemberId={loadingMemberId}
+        onView={viewMember}
+        viewedName={viewedMember?.display_name}
+      />
 
       {/* Import banner */}
       {!isViewingOther && importBannerVisible && (
@@ -259,9 +191,9 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
         ))}
       </div>
 
-      {errorMsg && (
+      {(errorMsg || viewError) && (
         <div className="px-4 py-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-sm">
-          {errorMsg}
+          {errorMsg || viewError}
         </div>
       )}
 

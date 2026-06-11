@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { clsx } from 'clsx'
+import { Lock } from 'lucide-react'
 import { WORLD_CUP_2026_PLAYERS } from '@/lib/players'
 import { getFlagUrl } from '@/lib/flags'
 
@@ -18,14 +19,23 @@ interface GoldenBootPrediction {
   is_locked: boolean
 }
 
+interface MemberPick {
+  user_id: string
+  display_name: string
+  player_name: string | null
+  team_name: string | null
+}
+
 interface GoldenBootClientProps {
   initialPrediction: GoldenBootPrediction | null
   teams: Team[]
   firstMatchKickoff: string | null
   porraId: string
+  memberPicks: MemberPick[]
+  currentUserId: string
 }
 
-export default function GoldenBootClient({ initialPrediction, teams, firstMatchKickoff, porraId }: GoldenBootClientProps) {
+export default function GoldenBootClient({ initialPrediction, teams, firstMatchKickoff, porraId, memberPicks, currentUserId }: GoldenBootClientProps) {
   const [query, setQuery] = useState(initialPrediction?.player_name || '')
   const [selectedPlayer, setSelectedPlayer] = useState(initialPrediction?.player_name || '')
   const [teamId, setTeamId] = useState(initialPrediction?.team_id || '')
@@ -298,6 +308,47 @@ export default function GoldenBootClient({ initialPrediction, teams, firstMatchK
             Bloqueo automático antes del primer partido del Mundial (11 jun 2026).
           </p>
         </div>
+
+        {/* Member picks */}
+        {memberPicks.length > 1 && (
+          <div className="bg-[#13151c] border border-[#1f2333] rounded-xl p-5">
+            <p className="text-xs font-medium text-zinc-500 mb-3">Predicciones de la porra</p>
+            <div className="space-y-1">
+              {memberPicks.map((m) => {
+                const isMe = m.user_id === currentUserId
+                return (
+                  <div key={m.user_id} className="flex items-center justify-between gap-2 py-2 border-b border-[#1f2333] last:border-0">
+                    <span className="text-xs text-zinc-400 truncate">
+                      {m.display_name}
+                      {isMe && <span className="text-zinc-600"> (tú)</span>}
+                    </span>
+                    {m.player_name ? (
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        {m.team_name && getFlagUrl(m.team_name) && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={getFlagUrl(m.team_name)!} alt={m.team_name} className="w-4 h-3 object-cover rounded-sm flex-shrink-0" />
+                        )}
+                        <span className="text-xs font-medium text-white truncate">{m.player_name}</span>
+                      </span>
+                    ) : !isLocked && !isMe ? (
+                      <span className="flex items-center gap-1 text-[11px] text-zinc-600 flex-shrink-0">
+                        <Lock className="w-3 h-3" />
+                        Oculta
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-zinc-600 flex-shrink-0">Sin predicción</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            {!isLocked && (
+              <p className="text-[11px] text-zinc-600 mt-3 leading-relaxed">
+                Las predicciones de los demás se revelan al inicio del torneo.
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

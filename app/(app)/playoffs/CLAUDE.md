@@ -93,6 +93,16 @@ El bracket renderiza cada partido con un componente custom (`CustomMatchNode`) q
 
 ---
 
+## Ver predicciones de otros miembros
+
+Igual que en grupos: selector `MemberViewBar` + hook `useMemberView` (un fetch a `GET /api/porras/{porraId}/predictions?userId=` por miembro, cacheado). Al ver a otro miembro:
+
+- El bracket y el card del tercer puesto pintan `shownPredictions` (las del miembro visto en vez de las propias).
+- El modal pasa a solo lectura: muestra la predicción del miembro si el partido ya empezó, "oculta hasta el kick-off" si no, o "no hizo predicción".
+- La RLS garantiza que las predicciones de partidos sin empezar nunca llegan al cliente.
+
+---
+
 ## Regla importante: ¿Qué vale empate en eliminatorias?
 
 En eliminatorias, si hay empate a 90 minutos el resultado es **X**, aunque luego haya prórroga o penaltis. El ganador de la eliminatoria en la realidad NO afecta a la predicción de la porra. Solo cuentan los 90 minutos.

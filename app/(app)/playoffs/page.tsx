@@ -46,6 +46,18 @@ export default async function PlayoffsPage() {
     .eq('porra_id', porraId)
     .eq('user_id', user.id)
 
+  // Miembros de la porra activa, para poder ver las predicciones de otros
+  const { data: memberRows } = await (supabase as any)
+    .from('porra_members')
+    .select('user_id, profiles:user_id(display_name, avatar_url)')
+    .eq('porra_id', porraId)
+
+  const members = (memberRows ?? []).map((m: any) => ({
+    user_id: m.user_id,
+    display_name: m.profiles?.display_name ?? 'Usuario',
+    avatar_url: m.profiles?.avatar_url ?? null,
+  }))
+
   return (
     <div className="space-y-6">
       <div>
@@ -57,6 +69,8 @@ export default async function PlayoffsPage() {
         initialMatches={matches || []}
         initialPredictions={predictions || []}
         porraId={porraId}
+        members={members}
+        currentUserId={user.id}
       />
     </div>
   )
