@@ -42,6 +42,19 @@ Tras importar se muestra un mensaje verde con el número de predicciones copiada
 
 ---
 
+## Ver predicciones de otros miembros
+
+Encima de los tabs de grupo hay un selector de miembros de la porra activa ("Viendo predicciones de: Tú / …"). Al seleccionar a otro miembro:
+
+- Se hace `GET /api/porras/{porraId}/predictions?userId={userId}` y se cachea la respuesta en estado local (`viewedCache`), un fetch por miembro.
+- La vista pasa a **solo lectura**: los botones 1/X/2 se deshabilitan y muestran la elección del otro usuario.
+- Solo se ven sus predicciones de partidos ya empezados — la RLS (`"Usuarios ven predicciones de otros SOLO tras kick-off"`) filtra el resto en la DB. Los partidos sin empezar muestran "Predicción oculta hasta el kick-off".
+- El banner de importación se oculta mientras se ve a otro miembro.
+
+`page.tsx` fetcha los miembros (`porra_members` join `profiles`) y pasa `members` + `currentUserId` al cliente.
+
+---
+
 ## Cómo funciona la predicción (lógica optimista)
 
 1. El usuario hace click en "1", "X" o "2"

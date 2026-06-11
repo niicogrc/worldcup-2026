@@ -66,6 +66,18 @@ export default async function GruposPage() {
     }
   }
 
+  // Miembros de la porra activa, para poder ver las predicciones de otros
+  const { data: memberRows } = await (supabase as any)
+    .from('porra_members')
+    .select('user_id, profiles:user_id(display_name, avatar_url)')
+    .eq('porra_id', porraId)
+
+  const members = (memberRows ?? []).map((m: any) => ({
+    user_id: m.user_id,
+    display_name: m.profiles?.display_name ?? 'Usuario',
+    avatar_url: m.profiles?.avatar_url ?? null,
+  }))
+
   const { data: standings } = await supabase
     .from('group_standings')
     .select(`
@@ -87,6 +99,8 @@ export default async function GruposPage() {
         standings={standings || []}
         porraId={porraId}
         importablePorras={importablePorras}
+        members={members}
+        currentUserId={user.id}
       />
     </div>
   )

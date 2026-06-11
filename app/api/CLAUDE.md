@@ -17,6 +17,7 @@ Todas las API Routes del proyecto. Son endpoints HTTP server-side de Next.js —
 | `/api/porras/[id]/join` | `POST` | Cliente (onboarding, porra-selector) | Únete a una porra existente |
 | `/api/porras/[id]/import-predictions` | `POST` | Cliente (onboarding, grupos) | Copia a la porra `[id]` las predicciones del usuario desde otra porra (`sourcePorraId` en body). Solo partidos sin empezar; no sobrescribe; incluye Bota de Oro si el torneo no ha empezado. Devuelve `{ imported, predictions[], skippedLocked, goldenBootImported }` |
 | `/api/porras/[id]/leave` | `POST` | Cliente (configuración) | Abandona una porra |
+| `/api/porras/[id]/predictions` | `GET` | Cliente (grupos) | Predicciones de un miembro de la porra (`?userId=`). Requiere ser miembro; la RLS solo expone predicciones ajenas de partidos ya empezados |
 | `/api/profile` | `PATCH` | Cliente (perfil) | Actualiza nombre y avatar URL del perfil |
 | `/api/profile/avatar` | `POST` | Cliente (perfil) | Sube imagen a Supabase Storage |
 | `/api/seed` | `POST` | Manual (curl) | Carga los 48 equipos y 104 partidos en la DB |
