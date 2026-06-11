@@ -27,8 +27,9 @@ Es un **Server Component** que:
 3. Fetcha las porras del usuario desde `porra_members` (join con `porras`)
 4. Si no tiene porras → redirect a `/onboarding`
 5. Lee la porra activa desde la cookie `active_porra_id`; si inválida, usa la primera
-6. Sincroniza la cookie si estaba vacía/incorrecta (vía Server Action `setActivePorra`)
-7. Renderiza el shell con `PorraSelector` en la cabecera del sidebar (desktop) y el mobile header
+6. Renderiza el shell con `PorraSelector` en la cabecera del sidebar (desktop) y el mobile header
+
+**Importante:** el layout NO escribe la cookie aunque esté vacía/incorrecta — los Server Components no pueden modificar cookies durante el render (Next.js lanza "Cookies can only be modified in a Server Action or Route Handler"). La cookie solo se escribe desde el Server Action `setActivePorra` (al cambiar de porra, crear o unirse); mientras tanto cada consumidor aplica el mismo fallback a la primera porra.
 
 ```typescript
 const isAdmin = profile?.role === 'admin'

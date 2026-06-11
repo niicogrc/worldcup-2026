@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Download, Loader2, X } from 'lucide-react'
 import { Database, MatchResult } from '@/lib/supabase/types'
 import { getFlagUrl } from '@/lib/flags'
 import { clsx } from 'clsx'
@@ -19,6 +21,7 @@ interface GroupsClientProps {
   initialPredictions: PredictionRow[]
   standings: StandingWithTeam[]
   porraId: string
+  importablePorras: { id: string; name: string }[]
 }
 
 const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
@@ -27,13 +30,19 @@ function formatKickoff(dateStr: string) {
   return new Date(dateStr).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
-export default function GroupsClient({ initialMatches, initialPredictions, standings, porraId }: GroupsClientProps) {
+export default function GroupsClient({ initialMatches, initialPredictions, standings, porraId, importablePorras }: GroupsClientProps) {
+  const router = useRouter()
   const [selectedGroup, setSelectedGroup] = useState('A')
   const [predictions, setPredictions] = useState<Record<string, MatchResult>>(
     initialPredictions.reduce((acc, p) => ({ ...acc, [p.match_id]: p.prediction }), {})
   )
   const [savingMatchId, setSavingMatchId] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [importBannerVisible, setImportBannerVisible] = useState(
+    initialPredictions.length === 0 && importablePorras.length > 0
+  )
+  const [importingFromId, setImportingFromId] = useState<string | null>(null)
+  const [importedCount, setImportedCount] = useState<number | null>(null)
 
   const groupMatches = initialMatches.filter((m) => m.group_letter === selectedGroup)
   const groupStandings = standings.filter((s) => s.group_letter === selectedGroup)
@@ -67,8 +76,83 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
     }
   }
 
+  const handleImport = async (sourcePorraId: string) => {
+    setImportingFromId(sourcePorraId)
+    setErrorMsg(null)
+    try {
+      const res = await fetch(`/api/porras/${porraId}/import-predictions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourcePorraId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al importar')
+
+      setPredictions((p) => ({
+        ...p,
+        ...(data.predictions ?? []).reduce(
+          (acc: Record<string, MatchResult>, row: { match_id: string; prediction: MatchResult }) => ({ ...acc, [row.match_id]: row.prediction }),
+          {}
+        ),
+      }))
+      setImportedCount(data.imported ?? 0)
+      setImportBannerVisible(false)
+      router.refresh()
+    } catch (err: any) {
+      setErrorMsg(err.message)
+    } finally {
+      setImportingFromId(null)
+    }
+  }
+
   return (
     <div className="space-y-6">
+      {/* Import banner */}
+      {importBannerVisible && (
+        <div className="bg-[#13151c] border border-blue-500/20 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+              <Download className="w-4 h-4 text-blue-400" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-white text-sm font-semibold">Aún no tienes predicciones en esta porra</p>
+              <p className="text-zinc-500 text-xs mt-0.5">
+                Puedes importar las que ya hiciste en otra porra (solo partidos sin empezar) o hacerlas de cero.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+            {importablePorras.map((p) => (
+              <button
+                key={p.id}
+                disabled={importingFromId !== null}
+                onClick={() => handleImport(p.id)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg transition-all cursor-pointer"
+              >
+                {importingFromId === p.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                Importar de {p.name}
+              </button>
+            ))}
+            <button
+              disabled={importingFromId !== null}
+              onClick={() => setImportBannerVisible(false)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-[#1f2333] hover:bg-[#2a2f42] disabled:opacity-40 text-zinc-300 text-xs font-medium rounded-lg transition-all cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+              Hacerlas de cero
+            </button>
+          </div>
+        </div>
+      )}
+
+      {importedCount !== null && (
+        <div className="px-4 py-3 bg-green-500/10 border border-green-500/20 text-green-400 rounded-lg text-sm">
+          {importedCount > 0
+            ? `Se han importado ${importedCount} predicciones. Puedes modificarlas mientras los partidos no hayan empezado.`
+            : 'No había predicciones que importar (los partidos ya habían empezado o ya las tenías).'}
+        </div>
+      )}
+
       {/* Group tabs */}
       <div className="flex gap-1 flex-wrap">
         {GROUPS.map((g) => (

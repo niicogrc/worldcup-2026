@@ -46,6 +46,26 @@ export default async function GruposPage() {
     .eq('porra_id', porraId)
     .eq('user_id', user.id)
 
+  // Si no tiene predicciones en esta porra, ofrecer importarlas desde otra
+  // porra suya donde sí las tenga
+  let importablePorras: { id: string; name: string }[] = []
+  if ((predictions ?? []).length === 0) {
+    const { data: otherPreds } = await (supabase as any)
+      .from('predictions')
+      .select('porra_id')
+      .eq('user_id', user.id)
+      .neq('porra_id', porraId)
+
+    const otherIds = [...new Set((otherPreds ?? []).map((p: any) => p.porra_id))]
+    if (otherIds.length > 0) {
+      const { data: otherPorras } = await (supabase as any)
+        .from('porras')
+        .select('id, name')
+        .in('id', otherIds)
+      importablePorras = otherPorras ?? []
+    }
+  }
+
   const { data: standings } = await supabase
     .from('group_standings')
     .select(`
@@ -66,6 +86,7 @@ export default async function GruposPage() {
         initialPredictions={predictions || []}
         standings={standings || []}
         porraId={porraId}
+        importablePorras={importablePorras}
       />
     </div>
   )
