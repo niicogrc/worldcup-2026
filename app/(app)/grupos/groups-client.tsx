@@ -2,10 +2,12 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Download, Loader2, X } from 'lucide-react'
+import { Download, Loader2, Lock, X } from 'lucide-react'
 import { Database, MatchResult } from '@/lib/supabase/types'
 import { getFlagUrl } from '@/lib/flags'
 import { clsx } from 'clsx'
+import { useMemberView, PorraMember } from '@/lib/hooks/use-member-view'
+import MemberViewBar from '@/components/porra/member-view-bar'
 
 type MatchWithTeams = Database['public']['Tables']['matches']['Row'] & {
   home_team: { id: string; name: string; flag_url: string | null; group_letter: string | null; short_code: string | null } | null
@@ -22,6 +24,8 @@ interface GroupsClientProps {
   standings: StandingWithTeam[]
   porraId: string
   importablePorras: { id: string; name: string }[]
+  members: PorraMember[]
+  currentUserId: string
 }
 
 const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
@@ -30,7 +34,7 @@ function formatKickoff(dateStr: string) {
   return new Date(dateStr).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
-export default function GroupsClient({ initialMatches, initialPredictions, standings, porraId, importablePorras }: GroupsClientProps) {
+export default function GroupsClient({ initialMatches, initialPredictions, standings, porraId, importablePorras, members, currentUserId }: GroupsClientProps) {
   const router = useRouter()
   const [selectedGroup, setSelectedGroup] = useState('A')
   const [predictions, setPredictions] = useState<Record<string, MatchResult>>(
@@ -43,6 +47,12 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
   )
   const [importingFromId, setImportingFromId] = useState<string | null>(null)
   const [importedCount, setImportedCount] = useState<number | null>(null)
+
+  // Ver predicciones de otro miembro de la porra (solo lectura)
+  const {
+    viewingUserId, isViewingOther, viewedMember, viewedRows, viewedPredictions,
+    loadingMemberId, viewError, viewMember,
+  } = useMemberView(porraId, currentUserId, members)
 
   const groupMatches = initialMatches.filter((m) => m.group_letter === selectedGroup)
   const groupStandings = standings.filter((s) => s.group_letter === selectedGroup)
@@ -107,8 +117,18 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
 
   return (
     <div className="space-y-6">
+      {/* Member viewer */}
+      <MemberViewBar
+        members={members}
+        currentUserId={currentUserId}
+        viewingUserId={viewingUserId}
+        loadingMemberId={loadingMemberId}
+        onView={viewMember}
+        viewedName={viewedMember?.display_name}
+      />
+
       {/* Import banner */}
-      {importBannerVisible && (
+      {!isViewingOther && importBannerVisible && (
         <div className="bg-[#13151c] border border-blue-500/20 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3">
           <div className="flex items-start gap-3 flex-1 min-w-0">
             <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
@@ -171,9 +191,9 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
         ))}
       </div>
 
-      {errorMsg && (
+      {(errorMsg || viewError) && (
         <div className="px-4 py-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-sm">
-          {errorMsg}
+          {errorMsg || viewError}
         </div>
       )}
 
@@ -189,12 +209,14 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
           )}
 
           {groupMatches.map((match) => {
-            const myPred = predictions[match.id]
+            const myPred = isViewingOther ? viewedPredictions[match.id] : predictions[match.id]
             const isLocked = new Date(match.kickoff_at) <= new Date()
             const isSaving = savingMatchId === match.id
             const isLive = ['1H', 'HT', '2H', 'ET', 'P'].includes(match.status)
             const isFinished = ['FT', 'AET', 'PEN'].includes(match.status)
-            const predRow = initialPredictions.find((p) => p.match_id === match.id)
+            const predRow = isViewingOther
+              ? viewedRows.find((p) => p.match_id === match.id)
+              : initialPredictions.find((p) => p.match_id === match.id)
             const wasCorrect = predRow?.is_correct
 
             return (
@@ -238,7 +260,7 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
                     {(['1', 'X', '2'] as MatchResult[]).map((opt) => (
                       <button
                         key={opt}
-                        disabled={isLocked || isSaving}
+                        disabled={isLocked || isSaving || isViewingOther}
                         onClick={() => handlePredict(match.id, opt)}
                         className={clsx(
                           'w-10 h-9 rounded-lg text-sm font-semibold transition-all duration-150 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40',
@@ -266,9 +288,16 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
 
                 {/* Footer */}
                 <div className="flex items-center justify-between px-4 py-2 border-t border-[#1f2333]">
-                  <span className={clsx('text-[11px]', isLocked ? 'text-zinc-600' : 'text-blue-400/80')}>
-                    {isLocked ? 'Predicciones cerradas' : 'Abierto para predecir'}
-                  </span>
+                  {isViewingOther && !isLocked ? (
+                    <span className="flex items-center gap-1 text-[11px] text-zinc-600">
+                      <Lock className="w-3 h-3" />
+                      Predicción oculta hasta el kick-off
+                    </span>
+                  ) : (
+                    <span className={clsx('text-[11px]', isLocked ? 'text-zinc-600' : 'text-blue-400/80')}>
+                      {isLocked ? 'Predicciones cerradas' : 'Abierto para predecir'}
+                    </span>
+                  )}
                   {isFinished && wasCorrect !== null && (
                     <span className={clsx('text-[11px] font-semibold', wasCorrect ? 'text-green-400' : 'text-zinc-600')}>
                       {wasCorrect ? '✓ +3 pts' : '✗ +0 pts'}

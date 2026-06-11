@@ -4,9 +4,11 @@ import React, { useState } from 'react'
 import { SingleEliminationBracket, SVGViewer } from '@g-loot/react-tournament-brackets'
 import { Database, MatchResult, TournamentPhase } from '@/lib/supabase/types'
 import { getFlagUrl } from '@/lib/flags'
-import { X, AlertCircle } from 'lucide-react'
+import { X, AlertCircle, Lock } from 'lucide-react'
 import { clsx } from 'clsx'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useMemberView, PorraMember } from '@/lib/hooks/use-member-view'
+import MemberViewBar from '@/components/porra/member-view-bar'
 
 type MatchWithTeams = Database['public']['Tables']['matches']['Row'] & {
   home_team: { id: string; name: string; flag_url: string | null; short_code: string | null } | null
@@ -18,6 +20,8 @@ interface PlayoffsClientProps {
   initialMatches: MatchWithTeams[]
   initialPredictions: PredictionRow[]
   porraId: string
+  members: PorraMember[]
+  currentUserId: string
 }
 
 const PHASE_NAMES: Record<TournamentPhase, string> = {
@@ -30,13 +34,22 @@ const PHASE_NAMES: Record<TournamentPhase, string> = {
   final: 'Gran Final',
 }
 
-export default function PlayoffsClient({ initialMatches, initialPredictions, porraId }: PlayoffsClientProps) {
+export default function PlayoffsClient({ initialMatches, initialPredictions, porraId, members, currentUserId }: PlayoffsClientProps) {
   const [predictions, setPredictions] = useState<Record<string, MatchResult>>(
     initialPredictions.reduce((acc, p) => ({ ...acc, [p.match_id]: p.prediction }), {})
   )
   const [activePredictMatch, setActivePredictMatch] = useState<MatchWithTeams | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Ver predicciones de otro miembro de la porra (solo lectura)
+  const {
+    viewingUserId, isViewingOther, viewedMember, viewedPredictions,
+    loadingMemberId, viewError, viewMember,
+  } = useMemberView(porraId, currentUserId, members)
+
+  // Mapa de predicciones que se pinta en el bracket: las propias o las del miembro visto
+  const shownPredictions = isViewingOther ? viewedPredictions : predictions
 
   const treeMatches = initialMatches.filter((m) => m.phase !== 'third_place')
   const thirdPlaceMatch = initialMatches.find((m) => m.phase === 'third_place')
@@ -53,7 +66,7 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
     matchesList.forEach((match, index) => {
       const matchIdStr = `${phasePrefix}-${index}`
       const nextMatchId = nextPhasePrefix ? `${nextPhasePrefix}-${Math.floor(index / 2)}` : null
-      const predictedChoice = predictions[match.id]
+      const predictedChoice = shownPredictions[match.id]
       const isFinished = ['FT', 'AET', 'PEN'].includes(match.status)
       const isLive = ['1H', 'HT', '2H', 'ET', 'P'].includes(match.status)
 
@@ -115,7 +128,7 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
   const CustomMatchNode = ({ match, onMatchClick }: any) => {
     const dbMatch = match.dbMatch as MatchWithTeams
     if (!dbMatch) return null
-    const predicted = predictions[dbMatch.id]
+    const predicted = shownPredictions[dbMatch.id]
     const isFinished = ['FT', 'AET', 'PEN'].includes(dbMatch.status)
     const isLive = ['1H', 'HT', '2H', 'ET', 'P'].includes(dbMatch.status)
 
@@ -152,7 +165,7 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
                   )}
                   <span className={clsx(
                     'truncate',
-                    predictions[dbMatch.id] === pred ? 'text-blue-400 font-semibold' : 'text-zinc-300',
+                    predicted === pred ? 'text-blue-400 font-semibold' : 'text-zinc-300',
                     match.participants[i].isWinner ? 'text-white font-bold' : ''
                   )}>
                     {teamName}
@@ -179,6 +192,22 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
 
   return (
     <div className="space-y-6">
+      {/* Member viewer */}
+      <MemberViewBar
+        members={members}
+        currentUserId={currentUserId}
+        viewingUserId={viewingUserId}
+        loadingMemberId={loadingMemberId}
+        onView={viewMember}
+        viewedName={viewedMember?.display_name}
+      />
+
+      {viewError && (
+        <div className="px-4 py-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-sm">
+          {viewError}
+        </div>
+      )}
+
       {/* Bracket */}
       <div className="bg-[#13151c] border border-[#1f2333] rounded-xl p-5">
         <div className="flex items-center justify-between mb-5">
@@ -229,7 +258,7 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
             onClick={() => setActivePredictMatch(thirdPlaceMatch)}
             className={clsx(
               'p-4 rounded-lg border cursor-pointer transition-all',
-              predictions[thirdPlaceMatch.id] ? 'border-blue-500/30 bg-blue-500/5' : 'border-[#1f2333] hover:border-[#2a2f42]'
+              shownPredictions[thirdPlaceMatch.id] ? 'border-blue-500/30 bg-blue-500/5' : 'border-[#1f2333] hover:border-[#2a2f42]'
             )}
           >
             <div className="flex items-center justify-between text-xs text-zinc-500 mb-3">
@@ -261,11 +290,11 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
                 )}
               </div>
             </div>
-            {predictions[thirdPlaceMatch.id] && (
+            {shownPredictions[thirdPlaceMatch.id] && (
               <div className="mt-3 pt-2 border-t border-[#1f2333] flex justify-between items-center text-xs">
-                <span className="text-zinc-500">Tu predicción:</span>
+                <span className="text-zinc-500">{isViewingOther ? `Predicción de ${viewedMember?.display_name}:` : 'Tu predicción:'}</span>
                 <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded font-semibold">
-                  {predictions[thirdPlaceMatch.id] === 'X' ? 'Empate' : predictions[thirdPlaceMatch.id] === '1' ? 'Gana Local' : 'Gana Visitante'}
+                  {shownPredictions[thirdPlaceMatch.id] === 'X' ? 'Empate' : shownPredictions[thirdPlaceMatch.id] === '1' ? 'Gana Local' : 'Gana Visitante'}
                 </span>
               </div>
             )}
@@ -316,7 +345,25 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
                 </div>
               )}
 
-              {isMatchLocked ? (
+              {isViewingOther ? (
+                <div className="py-4 text-center text-sm text-zinc-500">
+                  {!isMatchLocked ? (
+                    <span className="flex items-center justify-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5" />
+                      Predicción de {viewedMember?.display_name} oculta hasta el kick-off.
+                    </span>
+                  ) : shownPredictions[activePredictMatch.id] ? (
+                    <span>
+                      Predicción de {viewedMember?.display_name}:{' '}
+                      <span className="text-blue-400 font-semibold">
+                        {shownPredictions[activePredictMatch.id] === 'X' ? 'Empate' : shownPredictions[activePredictMatch.id] === '1' ? 'Gana Local' : 'Gana Visitante'}
+                      </span>
+                    </span>
+                  ) : (
+                    <span>{viewedMember?.display_name} no hizo predicción para este partido.</span>
+                  )}
+                </div>
+              ) : isMatchLocked ? (
                 <div className="py-4 text-center text-sm text-zinc-500">Predicciones cerradas para este partido.</div>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
