@@ -11,18 +11,18 @@ export interface SyncResult {
   errorMessage?: string
 }
 
-export async function syncTodayMatches(): Promise<SyncResult> {
+// date: YYYY-MM-DD to fetch only that day; omit to fetch all tournament fixtures (backfill)
+export async function syncTodayMatches(date?: string): Promise<SyncResult> {
   const startTime = Date.now()
   let matchesChecked = 0
   let matchesUpdated = 0
   const supabase = createAdminClient()
 
   try {
-    // Get current date in YYYY-MM-DD format (UTC)
-    const todayStr = new Date().toISOString().split('T')[0]
-    
-    // Fetch from API-Football
-    const fixtures: ApiFootballFixture[] = await getFixtures(todayStr)
+    const dateStr = date ?? new Date().toISOString().split('T')[0]
+
+    // Fetch from API-Football (no date = all fixtures for the season)
+    const fixtures: ApiFootballFixture[] = await getFixtures(date ? dateStr : undefined)
     matchesChecked = fixtures.length
 
     for (const fixture of fixtures) {
