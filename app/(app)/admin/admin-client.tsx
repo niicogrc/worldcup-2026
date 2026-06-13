@@ -1096,7 +1096,7 @@ export default function AdminClient({ users, matches, syncLogs, goldenBootPredic
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('usuarios')
   const [toast, setToast] = useState<{ message: string; type: 'ok' | 'err' } | null>(null)
-  const [recalculating, setRecalculating] = useState(false)
+  const [processing, setProcessing] = useState(false)
 
   const showToast = (message: string, type: 'ok' | 'err') => {
     setToast({ message, type })
@@ -1108,16 +1108,23 @@ export default function AdminClient({ users, matches, syncLogs, goldenBootPredic
     router.refresh()
   }
 
-  const handleRecalculate = async () => {
-    setRecalculating(true)
+  // Hace todo en cadena: backfill (trae resultados de API-Football y dispara
+  // los triggers de puntos) y luego recalculate (reconstruye el agregado de
+  // scores por porra). Un solo botón = una sola acción para el admin.
+  const handleSyncAndRecalculate = async () => {
+    setProcessing(true)
     try {
-      const data = await apiFetch('/api/admin/recalculate', {})
-      showToast(`Puntos recalculados · ${data.predictionsProcessed} predicciones · ${data.usersUpdated} usuarios`, 'ok')
+      const sync = await apiFetch('/api/admin/backfill', {})
+      const recalc = await apiFetch('/api/admin/recalculate', {})
+      showToast(
+        `Listo · ${sync.details?.matchesUpdated ?? 0} partidos sincronizados · ${recalc.predictionsProcessed} predicciones · ${recalc.usersUpdated} usuarios`,
+        'ok'
+      )
       router.refresh()
     } catch (e: any) {
       showToast(e.message, 'err')
     } finally {
-      setRecalculating(false)
+      setProcessing(false)
     }
   }
 
@@ -1130,12 +1137,13 @@ export default function AdminClient({ users, matches, syncLogs, goldenBootPredic
           <p className="text-zinc-500 text-sm mt-0.5">Control total de la porra</p>
         </div>
         <button
-          onClick={handleRecalculate}
-          disabled={recalculating}
+          onClick={handleSyncAndRecalculate}
+          disabled={processing}
+          title="Trae los resultados desde API-Football y recalcula todos los puntos"
           className="flex items-center gap-2 px-4 py-2.5 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-600/30 text-amber-400 text-sm font-medium rounded-xl transition-colors cursor-pointer disabled:opacity-50"
         >
-          {recalculating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-          Recalcular puntos
+          {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          Sincronizar y recalcular
         </button>
       </div>
 
