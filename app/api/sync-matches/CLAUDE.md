@@ -2,7 +2,7 @@
 
 ## Qué hace este endpoint
 
-Sincroniza los resultados de los partidos del día desde API-Football hacia la base de datos. Se ejecuta automáticamente cada hora mediante un cron job de Vercel.
+Sincroniza los resultados de los partidos del día desde TheSportsDB hacia la base de datos. Se ejecuta automáticamente cada hora mediante un cron job de Vercel.
 
 ---
 
@@ -37,13 +37,13 @@ Se ejecuta a los 5 minutos de cada hora (ej. 12:05, 13:05, 14:05...). Vercel añ
 
 ## Flujo de la sincronización
 
-El endpoint delega toda la lógica a `lib/api-football/sync.ts`:
+El endpoint delega toda la lógica a `lib/thesportsdb/sync.ts`:
 
 ```typescript
 const result = await syncTodayMatches()
 ```
 
-Ver `lib/api-football/CLAUDE.md` para el detalle completo del proceso de sync.
+Ver `lib/thesportsdb/CLAUDE.md` para el detalle completo del proceso de sync.
 
 ---
 
@@ -60,15 +60,12 @@ Ver `lib/api-football/CLAUDE.md` para el detalle completo del proceso de sync.
 
 ## Presupuesto de API
 
-API-Football tiene un límite de 100 requests/día en el free tier (reset a las 00:00 UTC).
+TheSportsDB devuelve todos los fixtures del torneo en una sola llamada (no hay filtro por fecha en la API). El filtrado se hace en `sync.ts` en memoria.
 
 ```
-Sync de hoy: 1 request (GET /fixtures?date=hoy)
+Sync de hoy: 1 request (GET /eventsseason.php?id=4429&s=2026)
 × 24 ejecuciones/día = 24 requests/día
-Margen restante: ~76 requests
 ```
-
-Hay margen para añadir sync de standings (1 req más por ejecución) durante la fase de grupos.
 
 ---
 

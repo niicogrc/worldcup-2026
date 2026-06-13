@@ -20,7 +20,8 @@ Aplicación web de porra del Mundial FIFA 2026 entre un grupo de amigos. Dos com
 | Auth       | Supabase Auth — OAuth Google y GitHub únicamente        |
 | DB         | Supabase Postgres                                       |
 | Realtime   | Supabase Realtime (leaderboard en vivo)                 |
-| API datos  | API-Football api-sports.io — `league=1`, `season=2026`  |
+| Resultados | TheSportsDB — `id=4429`, `season=2026` (free, tiene WC 2026) |
+| Standings  | No sincronizados desde fuente externa (la integración con API-Football fue eliminada; se puede reimplementar en el futuro) |
 | Seed       | openfootball/worldcup.json (fixtures estáticos, CC0)    |
 | Deploy     | Vercel — frontend + cron jobs                           |
 
@@ -87,12 +88,12 @@ porras                    — grupos de competición independientes; campo creat
 porra_members             — relación N:M entre porras y users; unique (porra_id, user_id)
 teams                     — 48 equipos; campo api_football_id para joins con API-Football
 matches                   — 104 partidos; result_ft calculado por trigger
-group_standings           — 12 tablas de grupo; sincronizado desde API-Football
+group_standings           — 12 tablas de grupo; no sincronizado actualmente (la integración con API-Football fue eliminada)
 predictions               — 1 fila por (porra_id, user_id, match_id); predicciones independientes por porra
 golden_boot_predictions   — 1 fila por (porra_id, user_id); Bota de Oro independiente por porra
 scoring_rules             — tabla de referencia inmutable; seed en la migración
 scores                    — leaderboard por porra; PK es (porra_id, user_id); columnas total_points* son generated always
-sync_logs                 — historial de sync con API-Football
+sync_logs                 — historial de sync con TheSportsDB
 ```
 
 #### Enums
@@ -127,65 +128,33 @@ user_role      → 'participant' | 'admin'
 
 ---
 
+## TheSportsDB (fuente de resultados)
+
+- **Base URL:** `https://www.thesportsdb.com/api/v1/json`
+- **Identificadores Mundial 2026:** `id=4429`, `season=2026`
+- **Free tier:** key pública `'3'`; registra una cuenta free en thesportsdb.com para mayor cuota
+
+### Endpoint utilizado
+
+```
+GET /eventsseason.php?id=4429&s=2026   → todos los fixtures del torneo (1 sola llamada)
+```
+
+### Lógica de sync (`lib/thesportsdb/sync.ts`)
+
+```
+1. getWorldCupFixtures() → todos los fixtures del Mundial (TheSportsDB, 1 call)
+2. Filtrar por fecha si se pasa `date` (YYYY-MM-DD); si no, procesar todos (backfill)
+3. Para cada fixture finished:
+   - status FT   → buscar en DB por kickoff_at, UPDATE matches SET home_goals_ft, away_goals_ft, result_ft
+   - status AET/PEN → SKIP + console.warn (TheSportsDB devuelve score post-prórroga; admin introduce el 90' manualmente)
+4. El trigger on_match_result_award_points concede puntos (result_ft debe estar en el SET)
+5. Registrar en sync_logs
+```
+
 ## API-Football
 
-- **Base URL:** `https://v3.football.api-sports.io`
-- **Auth header:** `x-apisports-key: <API_FOOTBALL_KEY>`
-- **Identificadores Mundial 2026:** `league=1`, `season=2026`
-- **Free tier:** 100 requests/día; reset a las 00:00 UTC
-
-### Endpoints utilizados
-
-```
-GET /fixtures?league=1&season=2026&date=YYYY-MM-DD   → partidos del día
-GET /fixtures?league=1&season=2026                   → todos los fixtures
-GET /standings?league=1&season=2026                  → tablas de grupo
-GET /players/topscorers?league=1&season=2026         → goleadores (Bota de Oro)
-```
-
-### Campos clave de /fixtures
-
-```typescript
-fixture.id            // → matches.api_football_id
-fixture.date          // → matches.kickoff_at (ISO UTC)
-fixture.status.short  // → matches.status (enum match_status)
-fixture.venue.name    // → matches.venue
-fixture.venue.city    // → matches.city
-goals.home            // → matches.home_goals_ft (solo si status FT)
-goals.away            // → matches.away_goals_ft
-score.fulltime.home   // alternativa más explícita
-score.fulltime.away
-score.extratime.home  // → matches.home_goals_aet
-score.penalty.home    // → matches.home_goals_pen
-teams.home.id         // → teams.api_football_id (para join)
-teams.home.name
-league.round          // → inferir phase y match_number
-```
-
-### Lógica de sync (`lib/api-football/sync.ts`)
-
-```
-1. GET /fixtures?league=1&season=2026&date=<hoy>
-2. Para cada fixture con status en [FT, AET, PEN]:
-   a. Buscar match en DB por api_football_id
-   b. Si home_goals_ft es null → UPDATE matches SET home_goals_ft, away_goals_ft, status, last_synced_at
-   c. El trigger set_match_result_ft calcula result_ft
-   d. El trigger on_match_result_award_points concede puntos
-3. Actualizar group_standings si ha cambiado
-4. Registrar en sync_logs
-```
-
-### Presupuesto de llamadas
-
-```
-Partidos del día:    1 call  (durante el torneo, max 8 partidos/día)
-Standings:           1 call  (solo fase de grupos, ~15 días)
-Top scorers:         1 call  (cada 4h, no cada hora)
-─────────────────────────────────────────────────────
-Máx por ejecución:   3 calls × 24 ejecuciones/día = 72 calls/día
-Free tier:           100 calls/día
-Margen:              28 calls de seguridad
-```
+La integración con API-Football fue eliminada (free tier no tiene acceso a resultados de 2026). Los resultados se obtienen de TheSportsDB. Los standings de grupo no se sincronizan actualmente desde ninguna fuente externa.
 
 ---
 
@@ -231,8 +200,8 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=        # solo en server-side / API routes
 
-# API-Football
-API_FOOTBALL_KEY=                 # nunca exponer al cliente
+# TheSportsDB (fuente de resultados del torneo)
+THESPORTSDB_KEY=3                 # '3' = key pública de test; registra una cuenta free para más cuota
 
 # Seguridad cron
 CRON_SECRET=                      # string aleatorio, mismo en Vercel y vercel.json
@@ -269,7 +238,7 @@ Sedes:       16 estadios en USA, México y Canadá (UTC-4 a UTC-7)
 - [x] Stack decidido
 - [x] Schema SQL completo (con triggers, RLS, vistas)
 - [x] Estructura Next.js
-- [x] Módulo API-Football (sync)
+- [x] Módulo TheSportsDB (sync)
 - [x] Seed script (openfootball)
 - [x] Auth (OAuth Google/GitHub)
 - [x] UI Porra 1 — grupos
@@ -307,7 +276,7 @@ Invoke-WebRequest -Method POST -Uri http://localhost:3000/api/seed
 ```
 
 ### 6. Seed requiere env vars
-El endpoint `/api/seed` valida `CRON_SECRET` y `API_FOOTBALL_KEY` antes de ejecutar. Sin ellas da 500.
+El endpoint `/api/seed` valida `CRON_SECRET` antes de ejecutar. Sin ella da 500.
 
 ---
 
@@ -332,9 +301,6 @@ Añadir al `.env.local`:
 ```env
 # Generar un string aleatorio (ej. con openssl rand -hex 32)
 CRON_SECRET=<un-string-aleatorio-largo>
-
-# Obtener en https://dashboard.api-football.com/ (free tier = 100 req/día)
-API_FOOTBALL_KEY=<tu-api-key>
 
 # Obtener en Supabase Dashboard → Settings → API → service_role key
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
