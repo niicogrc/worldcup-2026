@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { isAdmin } from '@/lib/admin'
-import { syncTodayMatches } from '@/lib/api-football/sync'
+import { syncTodayMatches } from '@/lib/thesportsdb/sync'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()

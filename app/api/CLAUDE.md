@@ -88,6 +88,6 @@ NextResponse.json({ error: error.message }, { status: 500 })
 NEXT_PUBLIC_SUPABASE_URL=         # URL del proyecto Supabase
 NEXT_PUBLIC_SUPABASE_ANON_KEY=    # Clave pública (safe para exponer)
 SUPABASE_SERVICE_ROLE_KEY=        # Clave privada — solo server-side
-API_FOOTBALL_KEY=                 # API key de api-sports.io
+THESPORTSDB_KEY=                  # API key de TheSportsDB (usa '3' como key pública de test)
 CRON_SECRET=                      # Token para proteger /api/seed y /api/sync-matches
 ```

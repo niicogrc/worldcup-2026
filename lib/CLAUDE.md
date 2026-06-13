@@ -12,7 +12,7 @@ Módulos de utilidad compartidos por toda la aplicación. No contienen lógica d
 |---|---|
 | `flags.ts` | Mapa de nombre de equipo → URL de bandera |
 | `players.ts` | Lista de jugadores candidatos a Bota de Oro |
-| `api-football/` | Cliente y sync de API-Football (ver su propio CLAUDE.md) |
+| `thesportsdb/` | Cliente HTTP de TheSportsDB + lógica de sync (`client.ts` + `sync.ts`) — fuente de resultados del torneo (ver su propio CLAUDE.md) |
 | `supabase/` | Clientes de Supabase + tipos (ver su propio CLAUDE.md) |
 
 ---

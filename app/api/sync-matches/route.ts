@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { syncTodayMatches } from '@/lib/api-football/sync'
+import { syncTodayMatches } from '@/lib/thesportsdb/sync'
 
 export async function POST(req: NextRequest) {
   try {
