@@ -19,10 +19,20 @@ export async function POST(req: NextRequest) {
 
   const toNum = (v: unknown) => (v === '' || v === null || v === undefined) ? null : Number(v)
 
+  const hFt = toNum(home_goals_ft)
+  const aFt = toNum(away_goals_ft)
+
+  // result_ft must be explicit in the SET clause so the AFTER UPDATE OF result_ft
+  // trigger (on_match_result_award_points) fires and awards points
+  const resultFt = (hFt != null && aFt != null && ['FT', 'AET', 'PEN'].includes(status))
+    ? (hFt > aFt ? '1' : hFt < aFt ? '2' : 'X')
+    : null
+
   const update: Record<string, unknown> = {
     status,
-    home_goals_ft: toNum(home_goals_ft),
-    away_goals_ft: toNum(away_goals_ft),
+    home_goals_ft: hFt,
+    away_goals_ft: aFt,
+    result_ft: resultFt,
     home_goals_aet: toNum(home_goals_aet),
     away_goals_aet: toNum(away_goals_aet),
     home_goals_pen: toNum(home_goals_pen),
