@@ -2,9 +2,10 @@
 
 ## Qué hay aquí
 
-Dos migraciones:
+Tres migraciones:
 - `20260101000000_init.sql` — schema base (tablas, enums, triggers, vistas, RLS)
 - `20260102000000_add_porras.sql` — sistema multi-porra (ver sección "Porras" más abajo)
+- `20260103000000_fix_prediction_lock.sql` — fix crítico del trigger `enforce_prediction_lock` (ver sección "Triggers")
 
 ---
 
@@ -156,7 +157,8 @@ Historial de ejecuciones del cron job. Útil para depurar si algo falla.
 ### `enforce_prediction_lock`
 **Tabla:** `predictions`
 **Cuándo:** Antes de cualquier UPDATE
-**Qué hace:** Lanza error si la predicción ya está bloqueada (`is_locked = true`). Última línea de defensa contra trampas.
+**Qué hace:** Lanza error si el usuario intenta cambiar su apuesta (`prediction`) tras el kick-off o cuando ya está bloqueada (`is_locked = true`). Última línea de defensa contra trampas.
+**⚠️ Fix `20260103`:** El check solo se aplica cuando cambia el campo `prediction`. Antes saltaba en *cualquier* UPDATE con `kickoff_at <= now()`, lo que hacía rollback de `award_points_on_result` (que escribe `is_correct`/`points_awarded` tras finalizar el partido) → ningún partido guardaba resultado ni puntos.
 
 ### `on_profile_created_init_scores`
 **Tabla:** `profiles`
