@@ -28,20 +28,35 @@ export async function syncTodayMatches(): Promise<SyncResult> {
     for (const fixture of fixtures) {
       const apiId = fixture.fixture.id
       const statusShort = fixture.fixture.status.short as MatchStatus
-      
+
       // We only sync matches that have completed in some way
       const isFinished = ['FT', 'AET', 'PEN'].includes(statusShort)
       if (!isFinished) continue
 
-      // Look up match in DB
-      const { data: match, error: fetchError } = await (supabase.from('matches') as any)
+      // Look up match in DB — first by api_football_id, then fall back to kickoff_at
+      let { data: match, error: fetchError } = await (supabase.from('matches') as any)
         .select('*')
         .eq('api_football_id', apiId)
         .maybeSingle()
 
-      if (fetchError || !match) {
-        // Match not seeded yet or query failed, skip
-        continue
+      if (fetchError) continue
+
+      if (!match) {
+        // Fallback: seed used synthetic IDs — try to match by kickoff time
+        const kickoffIso = new Date(fixture.fixture.date).toISOString()
+        const { data: matchByKickoff } = await (supabase.from('matches') as any)
+          .select('*')
+          .eq('kickoff_at', kickoffIso)
+          .maybeSingle()
+
+        if (!matchByKickoff) continue
+
+        match = matchByKickoff
+
+        // Update api_football_id so future syncs hit by ID directly
+        await (supabase.from('matches') as any)
+          .update({ api_football_id: apiId })
+          .eq('id', (match as any).id)
       }
 
       // Check if match already has result recorded to avoid duplicate trigger runs
@@ -49,12 +64,24 @@ export async function syncTodayMatches(): Promise<SyncResult> {
         continue
       }
 
-      // Update match
+      // Use score.fulltime for 90-minute result (business rule: only 90' counts)
+      const hFt = fixture.score.fulltime.home ?? fixture.goals.home
+      const aFt = fixture.score.fulltime.away ?? fixture.goals.away
+
+      // result_ft MUST be in the SET clause — Postgres only fires
+      // AFTER UPDATE OF result_ft when the column appears in the original SET list.
+      // The set_match_result_ft BEFORE trigger also computes this, but the
+      // on_match_result_award_points AFTER trigger won't fire without it here.
+      const resultFt = (hFt != null && aFt != null)
+        ? (hFt > aFt ? '1' : hFt < aFt ? '2' : 'X')
+        : null
+
       const { error: updateError } = await (supabase.from('matches') as any)
         .update({
           status: statusShort,
-          home_goals_ft: fixture.goals.home,
-          away_goals_ft: fixture.goals.away,
+          home_goals_ft: hFt,
+          away_goals_ft: aFt,
+          result_ft: resultFt,
           home_goals_aet: fixture.score.extratime.home,
           away_goals_aet: fixture.score.extratime.away,
           home_goals_pen: fixture.score.penalty.home,
