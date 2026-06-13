@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { MatchResult } from '@/lib/supabase/types'
 
 export type PorraMember = { user_id: string; display_name: string; avatar_url: string | null }
@@ -8,7 +8,7 @@ export type ViewedPrediction = { match_id: string; prediction: MatchResult; is_c
 
 // Estado y fetch para ver las predicciones de otro miembro de la porra.
 // Las respuestas se cachean por usuario (un fetch por miembro).
-export function useMemberView(porraId: string, currentUserId: string, members: PorraMember[]) {
+export function useMemberView(porraId: string, currentUserId: string, members: PorraMember[], initialUserId?: string | null) {
   const [viewingUserId, setViewingUserId] = useState<string | null>(null)
   const [viewedCache, setViewedCache] = useState<Record<string, ViewedPrediction[]>>({})
   const [loadingMemberId, setLoadingMemberId] = useState<string | null>(null)
@@ -44,6 +44,14 @@ export function useMemberView(porraId: string, currentUserId: string, members: P
       setLoadingMemberId(null)
     }
   }
+
+  // Preseleccionar un miembro al montar (p.ej. al llegar desde el leaderboard con ?member=).
+  useEffect(() => {
+    if (initialUserId && initialUserId !== currentUserId) {
+      viewMember(initialUserId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialUserId])
 
   return { viewingUserId, isViewingOther, viewedMember, viewedRows, viewedPredictions, loadingMemberId, viewError, viewMember }
 }

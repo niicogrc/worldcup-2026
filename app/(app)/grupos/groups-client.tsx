@@ -26,6 +26,7 @@ interface GroupsClientProps {
   importablePorras: { id: string; name: string }[]
   members: PorraMember[]
   currentUserId: string
+  initialViewUserId?: string | null
 }
 
 const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
@@ -34,7 +35,7 @@ function formatKickoff(dateStr: string) {
   return new Date(dateStr).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
-export default function GroupsClient({ initialMatches, initialPredictions, standings, porraId, importablePorras, members, currentUserId }: GroupsClientProps) {
+export default function GroupsClient({ initialMatches, initialPredictions, standings, porraId, importablePorras, members, currentUserId, initialViewUserId }: GroupsClientProps) {
   const router = useRouter()
   const [selectedGroup, setSelectedGroup] = useState('A')
   const [predictions, setPredictions] = useState<Record<string, MatchResult>>(
@@ -52,7 +53,7 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
   const {
     viewingUserId, isViewingOther, viewedMember, viewedRows, viewedPredictions,
     loadingMemberId, viewError, viewMember,
-  } = useMemberView(porraId, currentUserId, members)
+  } = useMemberView(porraId, currentUserId, members, initialViewUserId)
 
   const groupMatches = initialMatches.filter((m) => m.group_letter === selectedGroup)
   const groupStandings = standings.filter((s) => s.group_letter === selectedGroup)
