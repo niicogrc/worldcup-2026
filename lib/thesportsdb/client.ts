@@ -1,10 +1,12 @@
 import { MatchStatus } from '@/lib/supabase/types'
 
 const BASE_URL = 'https://www.thesportsdb.com/api/v1/json'
+const WORLD_CUP_LEAGUE_ID = '4429'
 
-// Raw API event (only the fields we read; all strings per the API)
+// Raw API event (only the fields we read; all values are strings per the API)
 export interface TheSportsDbEvent {
   idEvent: string
+  idLeague: string
   strHomeTeam: string
   strAwayTeam: string
   intHomeScore: string | null
@@ -53,9 +55,35 @@ function parseScore(raw: string | null): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-export async function getWorldCupFixtures(): Promise<WorldCupFixture[]> {
+function mapEvent(event: TheSportsDbEvent): WorldCupFixture | null {
+  if (!event.strTimestamp) return null
+
+  const ts = event.strTimestamp
+  // strTimestamp is UTC without a trailing Z; treat it as UTC.
+  const kickoffIso = new Date(ts.endsWith('Z') ? ts : ts + 'Z').toISOString()
+  const status = mapStatus(event.strStatus, event.strPostponed)
+
+  return {
+    sourceId: event.idEvent,
+    homeTeam: event.strHomeTeam,
+    awayTeam: event.strAwayTeam,
+    homeScore: parseScore(event.intHomeScore),
+    awayScore: parseScore(event.intAwayScore),
+    status,
+    kickoffIso,
+    round: event.intRound,
+    finished: FINISHED_STATUSES.has(status),
+  }
+}
+
+// Fetch all World Cup 2026 fixtures for a single UTC day (YYYY-MM-DD).
+//
+// We query per-day via `eventsday` rather than `eventsseason` because the free
+// tier caps `eventsseason` to a ~15-event rolling window around "now", which
+// silently drops already-played matches and makes backfill unreliable.
+export async function getWorldCupFixturesByDate(date: string): Promise<WorldCupFixture[]> {
   const apiKey = process.env.THESPORTSDB_KEY ?? '3'
-  const url = `${BASE_URL}/${apiKey}/eventsseason.php?id=4429&s=2026`
+  const url = `${BASE_URL}/${apiKey}/eventsday.php?d=${date}&l=${WORLD_CUP_LEAGUE_ID}`
 
   const response = await fetch(url, {
     headers: { Accept: 'application/json' },
@@ -68,33 +96,10 @@ export async function getWorldCupFixtures(): Promise<WorldCupFixture[]> {
   }
 
   const data: { events: TheSportsDbEvent[] | null } = await response.json()
-
   if (!data.events) return []
 
-  const fixtures: WorldCupFixture[] = []
-
-  for (const event of data.events) {
-    if (!event.strTimestamp) continue
-
-    const ts = event.strTimestamp
-    const kickoffIso = new Date(
-      ts.endsWith('Z') ? ts : ts + 'Z',
-    ).toISOString()
-
-    const status = mapStatus(event.strStatus, event.strPostponed)
-
-    fixtures.push({
-      sourceId: event.idEvent,
-      homeTeam: event.strHomeTeam,
-      awayTeam: event.strAwayTeam,
-      homeScore: parseScore(event.intHomeScore),
-      awayScore: parseScore(event.intAwayScore),
-      status,
-      kickoffIso,
-      round: event.intRound,
-      finished: FINISHED_STATUSES.has(status),
-    })
-  }
-
-  return fixtures
+  return data.events
+    .filter(e => e.idLeague === WORLD_CUP_LEAGUE_ID)
+    .map(mapEvent)
+    .filter((f): f is WorldCupFixture => f !== null)
 }
