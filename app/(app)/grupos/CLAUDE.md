@@ -53,6 +53,8 @@ Encima de los tabs de grupo hay un selector de miembros de la porra activa ("Vie
 
 `page.tsx` fetcha los miembros (`porra_members` join `profiles`) y pasa `members` + `currentUserId` al cliente.
 
+**Deep-link `?member=<userId>`:** `page.tsx` lee el query param `member` y lo pasa como `initialViewUserId` a `GroupsClient`. El hook `useMemberView` lo preselecciona al montar (un `useEffect` que llama a `viewMember`). Lo usan las filas del leaderboard para abrir directamente las predicciones de un usuario con sus puntos.
+
 ---
 
 ## Cómo funciona la predicción (lógica optimista)

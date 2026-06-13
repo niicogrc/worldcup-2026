@@ -9,7 +9,8 @@ import { DatabaseZap } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
-export default async function GruposPage() {
+export default async function GruposPage({ searchParams }: { searchParams: Promise<{ member?: string }> }) {
+  const { member } = await searchParams
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -101,6 +102,7 @@ export default async function GruposPage() {
         importablePorras={importablePorras}
         members={members}
         currentUserId={user.id}
+        initialViewUserId={member ?? null}
       />
     </div>
   )

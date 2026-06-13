@@ -77,9 +77,11 @@ export default function LeaderboardClient({ initialLeaderboard, currentUserId, u
                 return (
                   <tr
                     key={row.user_id}
+                    onClick={() => router.push(isMe ? '/grupos' : `/grupos?member=${row.user_id}`)}
+                    title={isMe ? 'Ver tus predicciones' : `Ver las predicciones de ${row.display_name}`}
                     className={clsx(
-                      'border-b border-[#1f2333] last:border-0 transition-colors',
-                      isMe ? 'bg-blue-500/5' : 'hover:bg-[#191c26]'
+                      'border-b border-[#1f2333] last:border-0 transition-colors cursor-pointer',
+                      isMe ? 'bg-blue-500/5 hover:bg-blue-500/10' : 'hover:bg-[#191c26]'
                     )}
                   >
                     <td className="py-3 px-5 text-center">
@@ -103,6 +105,7 @@ export default function LeaderboardClient({ initialLeaderboard, currentUserId, u
                           {!isMe && (
                             <Link
                               href={`/comparar?a=${currentUserId}&b=${row.user_id}`}
+                              onClick={(e) => e.stopPropagation()}
                               className="text-[10px] text-zinc-500 hover:text-blue-400 transition-colors border border-[#1f2333] hover:border-blue-500/30 px-1.5 py-0.5 rounded font-medium"
                             >
                               vs

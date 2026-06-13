@@ -70,6 +70,7 @@ Los datos vienen de la tabla `scores`. Los campos `total_points*` son columnas `
 Columnas: Pos, Jugador (con avatar), Grupos, Playoffs, Bota, Total.
 
 - El usuario actual aparece **resaltado en azul** (`bg-blue-500/5`)
+- **Cada fila es clicable**: navega a `/grupos?member=<user_id>` para ver las predicciones de ese usuario con sus puntos por partido (la propia fila va a `/grupos` sin parámetro). El botón `vs` usa `stopPropagation` para no disparar la navegación de la fila.
 - Posiciones 1, 2 y 3 muestran medallas (🥇🥈🥉) en vez de número
 - El avatar usa DiceBear como fallback si no hay foto de perfil: `https://api.dicebear.com/7.x/thumbs/svg?seed={nombre}`
 - Las columnas de detalle (Grupos, Playoffs, Bota) están ocultas en móvil (`hidden sm:table-cell`)
