@@ -5,7 +5,7 @@ import { isAdmin } from '@/lib/admin'
 const PHASE_POINTS: Record<string, number> = {
   group: 3,
   round_of_32: 3,
-  round_of_16: 3,
+  round_of_16: 4,
   quarter_final: 6,
   semi_final: 8,
   third_place: 5,
