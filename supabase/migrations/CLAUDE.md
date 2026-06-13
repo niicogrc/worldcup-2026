@@ -2,10 +2,13 @@
 
 ## Qué hay aquí
 
-Tres migraciones:
+Cuatro migraciones:
 - `20260101000000_init.sql` — schema base (tablas, enums, triggers, vistas, RLS)
 - `20260102000000_add_porras.sql` — sistema multi-porra (ver sección "Porras" más abajo)
-- `20260103000000_fix_prediction_lock.sql` — fix crítico del trigger `enforce_prediction_lock` (ver sección "Triggers")
+- `20260103000000_global_lock.sql` — bloqueo global de predicciones 1h antes del primer partido (2026-06-11 18:00 UTC) + RLS para revelar predicciones tras el cierre
+- `20260104000000_fix_global_lock_award.sql` — fix crítico: el bloqueo global rechazaba el award de puntos del sistema (ver sección "Triggers")
+
+> ⚠️ **Aviso de historia:** hubo una colisión de timestamp `20260103000000`. Una migración previa (`_fix_prediction_lock.sql`) compartía versión con `_global_lock.sql`, así que `db push` la dio por aplicada y nunca se ejecutó en prod. Quedó superada por `20260104000000_fix_global_lock_award.sql`. **No reutilices un timestamp ya existente.**
 
 ---
 
@@ -157,8 +160,8 @@ Historial de ejecuciones del cron job. Útil para depurar si algo falla.
 ### `enforce_prediction_lock`
 **Tabla:** `predictions`
 **Cuándo:** Antes de cualquier UPDATE
-**Qué hace:** Lanza error si el usuario intenta cambiar su apuesta (`prediction`) tras el kick-off o cuando ya está bloqueada (`is_locked = true`). Última línea de defensa contra trampas.
-**⚠️ Fix `20260103`:** El check solo se aplica cuando cambia el campo `prediction`. Antes saltaba en *cualquier* UPDATE con `kickoff_at <= now()`, lo que hacía rollback de `award_points_on_result` (que escribe `is_correct`/`points_awarded` tras finalizar el partido) → ningún partido guardaba resultado ni puntos.
+**Qué hace:** (función `lock_predictions_at_kickoff`) Lanza error si el usuario intenta cambiar su apuesta (`prediction`) una vez iniciado el torneo (bloqueo global, 2026-06-11 18:00 UTC) o cuando ya está bloqueada (`is_locked = true`). Última línea de defensa contra trampas.
+**⚠️ Fix `20260104`:** El check solo se evalúa cuando cambia el campo `prediction`. El bloqueo global (`20260103_global_lock`) saltaba en *cualquier* UPDATE tras el inicio del torneo, lo que hacía rollback de `award_points_on_result` (que escribe `is_correct`/`points_awarded` tras finalizar el partido) → ningún partido guardaba resultado ni puntos. Los UPDATE del sistema no tocan `prediction`, así que ahora pasan.
 
 ### `on_profile_created_init_scores`
 **Tabla:** `profiles`
