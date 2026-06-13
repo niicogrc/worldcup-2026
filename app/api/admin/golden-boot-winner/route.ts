@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
 
   const { data: predictions, error: fetchError } = await admin
     .from('golden_boot_predictions')
-    .select('user_id, player_name')
+    .select('porra_id, user_id, player_name')
 
   if (fetchError) {
     return NextResponse.json({ error: fetchError.message }, { status: 500 })
@@ -30,24 +30,17 @@ export async function POST(req: NextRequest) {
   const rows = (predictions as any[]) ?? []
   const winner = player_name.trim().toLowerCase()
 
-  const winnerUserIds = rows
-    .filter(p => p.player_name.trim().toLowerCase() === winner)
-    .map(p => p.user_id)
-
-  const wrongUserIds = rows
-    .filter(p => p.player_name.trim().toLowerCase() !== winner)
-    .map(p => p.user_id)
-
   const db = admin as any
 
   let awarded = 0
-  for (const userId of winnerUserIds) {
-    const { error } = await db.from('scores').update({ points_golden_boot: 15 }).eq('user_id', userId)
-    if (!error) awarded++
-  }
-
-  for (const userId of wrongUserIds) {
-    await db.from('scores').update({ points_golden_boot: 0 }).eq('user_id', userId)
+  for (const row of rows) {
+    const isCorrect = row.player_name.trim().toLowerCase() === winner
+    const { error } = await db
+      .from('scores')
+      .update({ points_golden_boot: isCorrect ? 15 : 0 })
+      .eq('porra_id', row.porra_id)
+      .eq('user_id', row.user_id)
+    if (!error && isCorrect) awarded++
   }
 
   return NextResponse.json({ success: true, awarded, total: rows.length })
