@@ -11,13 +11,11 @@ interface MemberViewBarProps {
   viewingUserId: string | null
   loadingMemberId: string | null
   onView: (userId: string | null) => void
-  /** Nombre del miembro que se está viendo (para el banner informativo) */
-  viewedName?: string | null
 }
 
 // Selector "Viendo predicciones de: Tú / <miembro>" + banner informativo.
 // Solo se renderiza si hay más miembros en la porra además del usuario actual.
-export default function MemberViewBar({ members, currentUserId, viewingUserId, loadingMemberId, onView, viewedName }: MemberViewBarProps) {
+export default function MemberViewBar({ members, currentUserId, viewingUserId, loadingMemberId, onView }: MemberViewBarProps) {
   const otherMembers = members.filter((m) => m.user_id !== currentUserId)
   if (otherMembers.length === 0) return null
 
@@ -57,15 +55,6 @@ export default function MemberViewBar({ members, currentUserId, viewingUserId, l
           </button>
         ))}
       </div>
-
-      {isViewingOther && (
-        <div className="px-4 py-3 bg-blue-500/10 border border-blue-500/20 text-blue-300 rounded-lg text-sm flex items-center gap-2">
-          <Eye className="w-4 h-4 flex-shrink-0" />
-          <span>
-            Estás viendo las predicciones de <strong>{viewedName}</strong>. Solo se muestran las de partidos ya empezados; las demás permanecen ocultas hasta el kick-off.
-          </span>
-        </div>
-      )}
     </div>
   )
 }

@@ -51,7 +51,7 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
 
   // Ver predicciones de otro miembro de la porra (solo lectura)
   const {
-    viewingUserId, isViewingOther, viewedMember, viewedRows, viewedPredictions,
+    viewingUserId, isViewingOther, viewedRows, viewedPredictions,
     loadingMemberId, viewError, viewMember,
   } = useMemberView(porraId, currentUserId, members, initialViewUserId)
 
@@ -241,7 +241,6 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
         viewingUserId={viewingUserId}
         loadingMemberId={loadingMemberId}
         onView={viewMember}
-        viewedName={viewedMember?.display_name}
       />
 
       {/* Import banner */}
