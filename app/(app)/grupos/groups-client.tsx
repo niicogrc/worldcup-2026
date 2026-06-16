@@ -58,6 +58,19 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
   const groupMatches = initialMatches.filter((m) => m.group_letter === selectedGroup)
   const groupStandings = standings.filter((s) => s.group_letter === selectedGroup)
 
+  // Vista cronológica (al ver las predicciones de otro usuario): todos los
+  // partidos en orden de kick-off, agrupados por día.
+  const chronologicalMatches = [...initialMatches].sort(
+    (a, b) => new Date(a.kickoff_at).getTime() - new Date(b.kickoff_at).getTime()
+  )
+  const chronoGroups = chronologicalMatches.reduce<{ date: string; matches: MatchWithTeams[] }[]>((acc, m) => {
+    const date = new Date(m.kickoff_at).toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: 'short' })
+    const last = acc[acc.length - 1]
+    if (last && last.date === date) last.matches.push(m)
+    else acc.push({ date, matches: [m] })
+    return acc
+  }, [])
+
   const handlePredict = async (matchId: string, choice: MatchResult) => {
     const prev = predictions[matchId]
     setPredictions((p) => ({ ...p, [matchId]: choice }))
@@ -114,6 +127,109 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
     } finally {
       setImportingFromId(null)
     }
+  }
+
+  const renderMatchCard = (match: MatchWithTeams) => {
+    const myPred = isViewingOther ? viewedPredictions[match.id] : predictions[match.id]
+    const isLocked = new Date(match.kickoff_at) <= new Date()
+    const isSaving = savingMatchId === match.id
+    const isLive = ['1H', 'HT', '2H', 'ET', 'P'].includes(match.status)
+    const isFinished = ['FT', 'AET', 'PEN'].includes(match.status)
+    const predRow = isViewingOther
+      ? viewedRows.find((p) => p.match_id === match.id)
+      : initialPredictions.find((p) => p.match_id === match.id)
+    const wasCorrect = predRow?.is_correct
+
+    return (
+      <div
+        key={match.id}
+        className={clsx(
+          'bg-[#13151c] border rounded-xl overflow-hidden transition-all',
+          wasCorrect === true ? 'border-green-500/30' : wasCorrect === false ? 'border-red-500/10' : 'border-[#1f2333]'
+        )}
+      >
+        {/* Header row */}
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#1f2333] bg-[#191c26]">
+          <span className="text-xs text-zinc-500">
+            Partido {match.match_number}
+            {match.group_letter ? ` · Grupo ${match.group_letter}` : ''}
+          </span>
+          <div className="flex items-center gap-2">
+            {isLive && <span className="text-[10px] font-semibold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full animate-pulse">En juego</span>}
+            {isFinished && <span className="text-[10px] font-medium text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full">Finalizado</span>}
+            {!isLive && !isFinished && <span className="text-xs text-zinc-500">{formatKickoff(match.kickoff_at)}</span>}
+            {isFinished && (
+              <span className="text-sm font-bold text-white tabular-nums">
+                {match.home_goals_ft} – {match.away_goals_ft}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Teams + prediction */}
+        <div className="px-4 py-3 flex items-center gap-3">
+          {/* Home */}
+          <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
+            <span className="text-sm font-medium text-white truncate text-right">{match.home_team?.name}</span>
+            {match.home_team?.name && getFlagUrl(match.home_team.name) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={getFlagUrl(match.home_team.name)!} alt={match.home_team.name} className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
+            ) : (
+              <span className="text-[10px] font-mono bg-[#1f2333] text-zinc-400 px-1.5 py-0.5 rounded flex-shrink-0">{match.home_team?.short_code}</span>
+            )}
+          </div>
+
+          {/* 1/X/2 buttons */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {(['1', 'X', '2'] as MatchResult[]).map((opt) => (
+              <button
+                key={opt}
+                disabled={isLocked || isSaving || isViewingOther}
+                onClick={() => handlePredict(match.id, opt)}
+                className={clsx(
+                  'w-10 h-9 rounded-lg text-sm font-semibold transition-all duration-150 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40',
+                  myPred === opt
+                    ? 'bg-blue-500 text-white shadow-sm shadow-blue-500/30'
+                    : 'bg-[#1f2333] text-zinc-400 hover:bg-[#2a2f42] hover:text-white'
+                )}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+
+          {/* Away */}
+          <div className="flex-1 flex items-center justify-start gap-2 min-w-0">
+            {match.away_team?.name && getFlagUrl(match.away_team.name) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={getFlagUrl(match.away_team.name)!} alt={match.away_team.name} className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
+            ) : (
+              <span className="text-[10px] font-mono bg-[#1f2333] text-zinc-400 px-1.5 py-0.5 rounded flex-shrink-0">{match.away_team?.short_code}</span>
+            )}
+            <span className="text-sm font-medium text-white truncate">{match.away_team?.name}</span>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-4 py-2 border-t border-[#1f2333]">
+          {isViewingOther && !isLocked ? (
+            <span className="flex items-center gap-1 text-[11px] text-zinc-600">
+              <Lock className="w-3 h-3" />
+              Predicción oculta hasta el kick-off
+            </span>
+          ) : (
+            <span className={clsx('text-[11px]', isLocked ? 'text-zinc-600' : 'text-blue-400/80')}>
+              {isLocked ? 'Predicciones cerradas' : 'Abierto para predecir'}
+            </span>
+          )}
+          {isFinished && wasCorrect !== null && (
+            <span className={clsx('text-[11px] font-semibold', wasCorrect ? 'text-green-400' : 'text-zinc-600')}>
+              {wasCorrect ? '✓ +3 pts' : '✗ +0 pts'}
+            </span>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -174,188 +290,112 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
         </div>
       )}
 
-      {/* Group tabs */}
-      <div className="flex gap-1 flex-wrap">
-        {GROUPS.map((g) => (
-          <button
-            key={g}
-            onClick={() => setSelectedGroup(g)}
-            className={clsx(
-              'px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer',
-              selectedGroup === g
-                ? 'bg-blue-500 text-white shadow-sm shadow-blue-500/20'
-                : 'bg-[#13151c] border border-[#1f2333] text-zinc-400 hover:text-white hover:border-zinc-600'
-            )}
-          >
-            Grupo {g}
-          </button>
-        ))}
-      </div>
-
       {(errorMsg || viewError) && (
         <div className="px-4 py-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-sm">
           {errorMsg || viewError}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Matches */}
-        <div className="lg:col-span-2 space-y-3">
-          <h2 className="text-sm font-medium text-zinc-500">Partidos · Grupo {selectedGroup}</h2>
+      {isViewingOther ? (
+        /* Vista cronológica (predicciones de otro usuario, solo lectura) */
+        <div className="space-y-6">
+          <h2 className="text-sm font-medium text-zinc-500">Todos los partidos · orden cronológico</h2>
 
-          {groupMatches.length === 0 && (
+          {chronologicalMatches.length === 0 && (
             <div className="bg-[#13151c] border border-[#1f2333] rounded-xl p-8 text-center text-zinc-500 text-sm">
               No hay partidos cargados. Ejecuta el seed.
             </div>
           )}
 
-          {groupMatches.map((match) => {
-            const myPred = isViewingOther ? viewedPredictions[match.id] : predictions[match.id]
-            const isLocked = new Date(match.kickoff_at) <= new Date()
-            const isSaving = savingMatchId === match.id
-            const isLive = ['1H', 'HT', '2H', 'ET', 'P'].includes(match.status)
-            const isFinished = ['FT', 'AET', 'PEN'].includes(match.status)
-            const predRow = isViewingOther
-              ? viewedRows.find((p) => p.match_id === match.id)
-              : initialPredictions.find((p) => p.match_id === match.id)
-            const wasCorrect = predRow?.is_correct
-
-            return (
-              <div
-                key={match.id}
+          {chronoGroups.map((group) => (
+            <div key={group.date} className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-600 pt-1 first-letter:uppercase">{group.date}</h3>
+              {group.matches.map((match) => renderMatchCard(match))}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <>
+          {/* Group tabs */}
+          <div className="flex gap-1 flex-wrap">
+            {GROUPS.map((g) => (
+              <button
+                key={g}
+                onClick={() => setSelectedGroup(g)}
                 className={clsx(
-                  'bg-[#13151c] border rounded-xl overflow-hidden transition-all',
-                  wasCorrect === true ? 'border-green-500/30' : wasCorrect === false ? 'border-red-500/10' : 'border-[#1f2333]'
+                  'px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer',
+                  selectedGroup === g
+                    ? 'bg-blue-500 text-white shadow-sm shadow-blue-500/20'
+                    : 'bg-[#13151c] border border-[#1f2333] text-zinc-400 hover:text-white hover:border-zinc-600'
                 )}
               >
-                {/* Header row */}
-                <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#1f2333] bg-[#191c26]">
-                  <span className="text-xs text-zinc-500">Partido {match.match_number}</span>
-                  <div className="flex items-center gap-2">
-                    {isLive && <span className="text-[10px] font-semibold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full animate-pulse">En juego</span>}
-                    {isFinished && <span className="text-[10px] font-medium text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full">Finalizado</span>}
-                    {!isLive && !isFinished && <span className="text-xs text-zinc-500">{formatKickoff(match.kickoff_at)}</span>}
-                    {isFinished && (
-                      <span className="text-sm font-bold text-white tabular-nums">
-                        {match.home_goals_ft} – {match.away_goals_ft}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Teams + prediction */}
-                <div className="px-4 py-3 flex items-center gap-3">
-                  {/* Home */}
-                  <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
-                    <span className="text-sm font-medium text-white truncate text-right">{match.home_team?.name}</span>
-                    {match.home_team?.name && getFlagUrl(match.home_team.name) ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={getFlagUrl(match.home_team.name)!} alt={match.home_team.name} className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
-                    ) : (
-                      <span className="text-[10px] font-mono bg-[#1f2333] text-zinc-400 px-1.5 py-0.5 rounded flex-shrink-0">{match.home_team?.short_code}</span>
-                    )}
-                  </div>
-
-                  {/* 1/X/2 buttons */}
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    {(['1', 'X', '2'] as MatchResult[]).map((opt) => (
-                      <button
-                        key={opt}
-                        disabled={isLocked || isSaving || isViewingOther}
-                        onClick={() => handlePredict(match.id, opt)}
-                        className={clsx(
-                          'w-10 h-9 rounded-lg text-sm font-semibold transition-all duration-150 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40',
-                          myPred === opt
-                            ? 'bg-blue-500 text-white shadow-sm shadow-blue-500/30'
-                            : 'bg-[#1f2333] text-zinc-400 hover:bg-[#2a2f42] hover:text-white'
-                        )}
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Away */}
-                  <div className="flex-1 flex items-center justify-start gap-2 min-w-0">
-                    {match.away_team?.name && getFlagUrl(match.away_team.name) ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={getFlagUrl(match.away_team.name)!} alt={match.away_team.name} className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
-                    ) : (
-                      <span className="text-[10px] font-mono bg-[#1f2333] text-zinc-400 px-1.5 py-0.5 rounded flex-shrink-0">{match.away_team?.short_code}</span>
-                    )}
-                    <span className="text-sm font-medium text-white truncate">{match.away_team?.name}</span>
-                  </div>
-                </div>
-
-                {/* Footer */}
-                <div className="flex items-center justify-between px-4 py-2 border-t border-[#1f2333]">
-                  {isViewingOther && !isLocked ? (
-                    <span className="flex items-center gap-1 text-[11px] text-zinc-600">
-                      <Lock className="w-3 h-3" />
-                      Predicción oculta hasta el kick-off
-                    </span>
-                  ) : (
-                    <span className={clsx('text-[11px]', isLocked ? 'text-zinc-600' : 'text-blue-400/80')}>
-                      {isLocked ? 'Predicciones cerradas' : 'Abierto para predecir'}
-                    </span>
-                  )}
-                  {isFinished && wasCorrect !== null && (
-                    <span className={clsx('text-[11px] font-semibold', wasCorrect ? 'text-green-400' : 'text-zinc-600')}>
-                      {wasCorrect ? '✓ +3 pts' : '✗ +0 pts'}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Standings */}
-        <div>
-          <h2 className="text-sm font-medium text-zinc-500 mb-3">Clasificación · Grupo {selectedGroup}</h2>
-          <div className="bg-[#13151c] border border-[#1f2333] rounded-xl overflow-hidden">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-[#1f2333] text-zinc-500 font-medium">
-                  <th className="py-2.5 px-3 text-center w-8">#</th>
-                  <th className="py-2.5 px-3 text-left">Equipo</th>
-                  <th className="py-2.5 px-2 text-center">PJ</th>
-                  <th className="py-2.5 px-2 text-center">DG</th>
-                  <th className="py-2.5 px-3 text-center">Pts</th>
-                </tr>
-              </thead>
-              <tbody>
-                {groupStandings.map((row) => (
-                  <tr key={row.id} className="border-b border-[#1f2333] last:border-0">
-                    <td className="py-2.5 px-3 text-center text-zinc-500">{row.position}</td>
-                    <td className="py-2.5 px-3">
-                      <div className="flex items-center gap-1.5">
-                        {row.team?.name && getFlagUrl(row.team.name) && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={getFlagUrl(row.team.name)!} alt={row.team.name} className="w-5 h-3.5 object-cover rounded-sm flex-shrink-0" />
-                        )}
-                        <span className="font-medium text-white truncate max-w-[100px]">{row.team?.name}</span>
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-2 text-center text-zinc-400 tabular-nums">{row.played}</td>
-                    <td className={clsx('py-2.5 px-2 text-center tabular-nums font-medium',
-                      row.goal_diff > 0 ? 'text-green-400' : row.goal_diff < 0 ? 'text-red-400' : 'text-zinc-400'
-                    )}>
-                      {row.goal_diff > 0 ? `+${row.goal_diff}` : row.goal_diff}
-                    </td>
-                    <td className="py-2.5 px-3 text-center font-bold text-white tabular-nums">{row.points}</td>
-                  </tr>
-                ))}
-                {groupStandings.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="py-6 text-center text-zinc-600">Sin datos</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                Grupo {g}
+              </button>
+            ))}
           </div>
-        </div>
-      </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Matches */}
+            <div className="lg:col-span-2 space-y-3">
+              <h2 className="text-sm font-medium text-zinc-500">Partidos · Grupo {selectedGroup}</h2>
+
+              {groupMatches.length === 0 && (
+                <div className="bg-[#13151c] border border-[#1f2333] rounded-xl p-8 text-center text-zinc-500 text-sm">
+                  No hay partidos cargados. Ejecuta el seed.
+                </div>
+              )}
+
+              {groupMatches.map((match) => renderMatchCard(match))}
+            </div>
+
+            {/* Standings */}
+            <div>
+              <h2 className="text-sm font-medium text-zinc-500 mb-3">Clasificación · Grupo {selectedGroup}</h2>
+              <div className="bg-[#13151c] border border-[#1f2333] rounded-xl overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-[#1f2333] text-zinc-500 font-medium">
+                      <th className="py-2.5 px-3 text-center w-8">#</th>
+                      <th className="py-2.5 px-3 text-left">Equipo</th>
+                      <th className="py-2.5 px-2 text-center">PJ</th>
+                      <th className="py-2.5 px-2 text-center">DG</th>
+                      <th className="py-2.5 px-3 text-center">Pts</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupStandings.map((row) => (
+                      <tr key={row.id} className="border-b border-[#1f2333] last:border-0">
+                        <td className="py-2.5 px-3 text-center text-zinc-500">{row.position}</td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center gap-1.5">
+                            {row.team?.name && getFlagUrl(row.team.name) && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={getFlagUrl(row.team.name)!} alt={row.team.name} className="w-5 h-3.5 object-cover rounded-sm flex-shrink-0" />
+                            )}
+                            <span className="font-medium text-white truncate max-w-[100px]">{row.team?.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-2 text-center text-zinc-400 tabular-nums">{row.played}</td>
+                        <td className={clsx('py-2.5 px-2 text-center tabular-nums font-medium',
+                          row.goal_diff > 0 ? 'text-green-400' : row.goal_diff < 0 ? 'text-red-400' : 'text-zinc-400'
+                        )}>
+                          {row.goal_diff > 0 ? `+${row.goal_diff}` : row.goal_diff}
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-bold text-white tabular-nums">{row.points}</td>
+                      </tr>
+                    ))}
+                    {groupStandings.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="py-6 text-center text-zinc-600">Sin datos</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
