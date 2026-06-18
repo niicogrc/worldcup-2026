@@ -1115,9 +1115,9 @@ export default function AdminClient({ users, matches, syncLogs, goldenBootPredic
     setProcessing(true)
     try {
       const sync = await apiFetch('/api/admin/backfill', {})
-      const recalc = await apiFetch('/api/admin/recalculate', {})
+      await apiFetch('/api/admin/recalculate', {})
       showToast(
-        `Listo · ${sync.details?.matchesUpdated ?? 0} partidos sincronizados · ${recalc.predictionsProcessed} predicciones · ${recalc.usersUpdated} usuarios`,
+        `Listo · ${sync.details?.matchesUpdated ?? 0} partidos sincronizados · puntos recalculados`,
         'ok'
       )
       router.refresh()
