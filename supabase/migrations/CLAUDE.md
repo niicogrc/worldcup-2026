@@ -2,11 +2,12 @@
 
 ## Qué hay aquí
 
-Cuatro migraciones:
+Cinco migraciones:
 - `20260101000000_init.sql` — schema base (tablas, enums, triggers, vistas, RLS)
 - `20260102000000_add_porras.sql` — sistema multi-porra (ver sección "Porras" más abajo)
 - `20260103000000_global_lock.sql` — bloqueo global de predicciones 1h antes del primer partido (2026-06-11 18:00 UTC) + RLS para revelar predicciones tras el cierre
 - `20260104000000_fix_global_lock_award.sql` — fix crítico: el bloqueo global rechazaba el award de puntos del sistema (ver sección "Triggers")
+- `20260105000000_idempotent_scoring.sql` — puntuación idempotente y recálculo atómico (ver sección "Triggers"). Arregla que los puntos pudieran **bajar** tras un recálculo a medias o por inflación del trigger aditivo.
 
 > ⚠️ **Aviso de historia:** hubo una colisión de timestamp `20260103000000`. Una migración previa (`_fix_prediction_lock.sql`) compartía versión con `_global_lock.sql`, así que `db push` la dio por aplicada y nunca se ejecutó en prod. Quedó superada por `20260104000000_fix_global_lock_award.sql`. **No reutilices un timestamp ya existente.**
 
@@ -154,8 +155,14 @@ Historial de ejecuciones del cron job. Útil para depurar si algo falla.
 
 ### `on_match_result_award_points`
 **Tabla:** `matches`
-**Cuándo:** Cuando `result_ft` cambia de NULL a un valor
-**Qué hace:** Recorre todas las predicciones del partido, marca `is_correct` y asigna `points_awarded` según la fase
+**Cuándo:** Cuando `result_ft` cambia (NULL→valor o valor→valor distinto)
+**Qué hace:** Recorre todas las predicciones del partido, marca `is_correct` y asigna `points_awarded` según la fase.
+**⚠️ Fix `20260105` (idempotente):** antes era ADITIVO puro (`scores = scores + pts`), así que re-disparar el trigger o **corregir** un resultado inflaba los puntos sin restar lo ya concedido. Ahora aplica el **delta** (`nuevo_pts - points_awarded_previo`) por predicción, así que es idempotente: re-procesar o corregir un partido nunca duplica ni infla.
+
+### `recompute_all_scores()` (función, no trigger)
+**Qué hace:** Recálculo completo en **una sola transacción** (atómico). Recomputa `predictions.points_awarded/is_correct` desde los resultados actuales, resetea las columnas de puntos por fase de `scores` (preserva `points_golden_boot`) y re-agrega. La llama `/api/admin/recalculate` vía `rpc()`.
+**Por qué:** el recálculo anterior (en JS, en el endpoint) reseteaba a 0 y luego actualizaba usuario por usuario con awaits sucesivos; si la función serverless se cortaba a medias dejaba los scores a 0 o parciales → "menos puntos que ayer". Al ser una transacción, si algo falla hace rollback y los scores quedan intactos.
+**Disparador:** el GitHub Action `.github/workflows/sync-and-recalculate.yml` llama a `/api/admin/recalculate` cada 3 horas (red de seguridad), autenticándose con `Authorization: Bearer CRON_SECRET`. Por eso el endpoint acepta dos vías de auth: cron (CRON_SECRET) o sesión de admin. Con el recálculo no atómico previo, cada pasada era una oportunidad de dejar los scores corruptos; ahora es seguro.
 
 ### `enforce_prediction_lock`
 **Tabla:** `predictions`

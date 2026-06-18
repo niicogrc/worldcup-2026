@@ -10,15 +10,45 @@ import { clsx } from 'clsx'
 type LeaderboardRow = Database['public']['Views']['leaderboard']['Row']
 type ScoreRow = Database['public']['Tables']['scores']['Row']
 
+interface MatchHistoryEntry {
+  pts: number
+  ok: boolean
+}
+
 interface LeaderboardClientProps {
   initialLeaderboard: LeaderboardRow[]
   currentUserId: string
   userScore: ScoreRow | null
+  historyByUser: Record<string, MatchHistoryEntry[]>
 }
 
 const MEDALS: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' }
 
-export default function LeaderboardClient({ initialLeaderboard, currentUserId, userScore }: LeaderboardClientProps) {
+function MatchHistory({ history }: { history: MatchHistoryEntry[] }) {
+  if (!history || history.length === 0) {
+    return <span className="text-zinc-600 text-xs">—</span>
+  }
+  return (
+    <div className="flex items-center justify-center gap-1">
+      {history.map((h, i) => (
+        <span
+          key={i}
+          title={h.ok ? `Acierto · +${h.pts}` : 'Fallo'}
+          className={clsx(
+            'inline-flex items-center justify-center w-6 h-6 rounded text-[11px] font-bold tabular-nums',
+            h.ok
+              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
+              : 'bg-red-500/15 text-red-400 border border-red-500/25'
+          )}
+        >
+          {h.pts}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+export default function LeaderboardClient({ initialLeaderboard, currentUserId, userScore, historyByUser }: LeaderboardClientProps) {
   const router = useRouter()
   const supabase = createClient()
 
@@ -65,6 +95,7 @@ export default function LeaderboardClient({ initialLeaderboard, currentUserId, u
               <tr className="text-xs font-medium text-zinc-500 border-b border-[#1f2333]">
                 <th className="py-3 px-5 text-center w-14">Pos</th>
                 <th className="py-3 px-4 text-left">Jugador</th>
+                <th className="py-3 px-4 text-center hidden md:table-cell">Últimos 5</th>
                 <th className="py-3 px-4 text-center hidden sm:table-cell">Grupos</th>
                 <th className="py-3 px-4 text-center hidden sm:table-cell">Playoffs</th>
                 <th className="py-3 px-4 text-center hidden sm:table-cell">Bota</th>
@@ -114,6 +145,9 @@ export default function LeaderboardClient({ initialLeaderboard, currentUserId, u
                         </div>
                       </div>
                     </td>
+                    <td className="py-3 px-4 hidden md:table-cell">
+                      <MatchHistory history={historyByUser[row.user_id] ?? []} />
+                    </td>
                     <td className="py-3 px-4 text-center text-zinc-300 tabular-nums hidden sm:table-cell">{row.total_points_groups}</td>
                     <td className="py-3 px-4 text-center text-zinc-300 tabular-nums hidden sm:table-cell">{row.total_points_playoffs}</td>
                     <td className="py-3 px-4 text-center hidden sm:table-cell">
@@ -132,7 +166,7 @@ export default function LeaderboardClient({ initialLeaderboard, currentUserId, u
 
               {initialLeaderboard.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-zinc-500 text-sm">
+                  <td colSpan={7} className="py-12 text-center text-zinc-500 text-sm">
                     Aún no hay participantes registrados.
                   </td>
                 </tr>

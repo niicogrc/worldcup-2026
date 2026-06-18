@@ -51,6 +51,43 @@ export default async function DashboardPage() {
     .eq('user_id', user.id)
     .single()
 
+  // Historial de los últimos 5 partidos jugados, por jugador (orden cronológico).
+  const { data: completedMatches } = await (supabase as any)
+    .from('matches')
+    .select('id, kickoff_at')
+    .not('result_ft', 'is', null)
+    .order('kickoff_at', { ascending: true })
+
+  const completed = (completedMatches as any[]) ?? []
+  const matchOrder = new Map<string, number>(completed.map((m: any, i: number) => [m.id, i]))
+  const completedIds = completed.map((m: any) => m.id)
+
+  const historyByUser: Record<string, { pts: number; ok: boolean }[]> = {}
+  if (completedIds.length > 0) {
+    const { data: preds } = await (supabase as any)
+      .from('predictions')
+      .select('user_id, match_id, points_awarded, is_correct')
+      .eq('porra_id', porraId)
+      .in('match_id', completedIds)
+
+    const grouped: Record<string, { order: number; pts: number; ok: boolean }[]> = {}
+    for (const p of (preds as any[]) ?? []) {
+      const order = matchOrder.get(p.match_id)
+      if (order === undefined) continue
+      ;(grouped[p.user_id] ??= []).push({
+        order,
+        pts: p.points_awarded ?? 0,
+        ok: Boolean(p.is_correct),
+      })
+    }
+    for (const [uid, rows] of Object.entries(grouped)) {
+      historyByUser[uid] = rows
+        .sort((a, b) => a.order - b.order)
+        .slice(-5)
+        .map(({ pts, ok }) => ({ pts, ok }))
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -68,6 +105,7 @@ export default async function DashboardPage() {
         initialLeaderboard={leaderboard || []}
         currentUserId={user.id}
         userScore={userScore}
+        historyByUser={historyByUser}
       />
     </div>
   )

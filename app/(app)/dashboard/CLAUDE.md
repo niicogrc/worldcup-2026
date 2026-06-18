@@ -67,7 +67,15 @@ Los datos vienen de la tabla `scores`. Los campos `total_points*` son columnas `
 
 ## Tabla de ranking
 
-Columnas: Pos, Jugador (con avatar), Grupos, Playoffs, Bota, Total.
+Columnas: Pos, Jugador (con avatar), **Últimos 5**, Grupos, Playoffs, Bota, Total.
+
+### Columna "Últimos 5"
+
+Muestra el rendimiento de cada jugador en sus **últimos 5 partidos jugados** (orden cronológico, el más reciente a la derecha) como chips de color:
+- Verde (`emerald`) con los puntos obtenidos si acertó (`[3]`, `[6]`, etc.).
+- Rojo (`red`) con `[0]` si falló.
+
+El historial se calcula en `page.tsx`: se fetchan los partidos con `result_ft` no nulo ordenados por `kickoff_at`, y las predicciones de la porra sobre esos partidos; se agrupan por usuario, se ordenan por fecha del partido y se cogen los 5 últimos. Se pasa como prop `historyByUser: Record<userId, {pts, ok}[]>`. La columna se oculta en móvil (`hidden md:table-cell`).
 
 - El usuario actual aparece **resaltado en azul** (`bg-blue-500/5`)
 - **Cada fila es clicable**: navega a `/grupos?member=<user_id>` para ver las predicciones de ese usuario con sus puntos por partido (la propia fila va a `/grupos` sin parámetro). El botón `vs` usa `stopPropagation` para no disparar la navegación de la fila.
