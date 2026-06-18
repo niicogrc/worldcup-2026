@@ -1,5 +1,11 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { getWorldCupFixturesByDate, WorldCupFixture } from '@/lib/thesportsdb/client'
+import {
+  discordNotificationsEnabled,
+  notifyMatchResults,
+  snapshotLeaderboard,
+  type MatchUpdate,
+} from '@/lib/notify'
 
 // First match of the tournament (México vs Sudáfrica, 11 jun 2026).
 const TOURNAMENT_START = '2026-06-11'
@@ -18,6 +24,8 @@ interface Totals {
   checked: number
   updated: number
   manual: number
+  // Matches that transitioned to FT this run, for the Discord notification.
+  updates: MatchUpdate[]
 }
 
 function utcDay(d: Date): string {
@@ -107,6 +115,16 @@ async function applyFixture(
     )
   } else {
     totals.updated++
+    if (resultFt !== null && hFt != null && aFt != null) {
+      totals.updates.push({
+        homeTeam: fixture.homeTeam,
+        awayTeam: fixture.awayTeam,
+        homeScore: hFt,
+        awayScore: aFt,
+        result: resultFt,
+        phase: (match as any).phase,
+      })
+    }
   }
 }
 
@@ -114,7 +132,12 @@ async function applyFixture(
 async function syncDates(dates: string[]): Promise<SyncResult> {
   const startTime = Date.now()
   const supabase = createAdminClient()
-  const totals: Totals = { checked: 0, updated: 0, manual: 0 }
+  const totals: Totals = { checked: 0, updated: 0, manual: 0, updates: [] }
+
+  // Snapshot the leaderboard before applying results so we can report who
+  // gained points / climbed. Skipped entirely if no Discord webhook is set.
+  const wantNotify = discordNotificationsEnabled()
+  const before = wantNotify ? await snapshotLeaderboard(supabase) : []
 
   try {
     for (const date of dates) {
@@ -122,6 +145,13 @@ async function syncDates(dates: string[]): Promise<SyncResult> {
       for (const fixture of fixtures) {
         await applyFixture(supabase, fixture, totals)
       }
+    }
+
+    // Only notify when at least one match actually finished this run. The DB
+    // trigger has already awarded points, so the "after" snapshot reflects them.
+    if (wantNotify && totals.updates.length > 0) {
+      const after = await snapshotLeaderboard(supabase)
+      await notifyMatchResults({ matches: totals.updates, before, after })
     }
 
     const durationMs = Date.now() - startTime

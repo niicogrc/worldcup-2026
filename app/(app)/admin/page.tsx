@@ -33,7 +33,7 @@ export default async function AdminPage() {
       porrasRes,
       porraMembersRes,
     ] = await Promise.all([
-      admin.from('profiles').select('id, display_name, avatar_url, role').order('display_name'),
+      admin.from('profiles').select('id, display_name, avatar_url, role, discord_user_id').order('display_name'),
       admin.from('scores').select('porra_id, user_id, total_points, total_points_groups, total_points_playoffs, points_golden_boot'),
       admin.from('matches').select(`
         id, phase, match_number, group_letter, kickoff_at, venue, city, status,
@@ -108,6 +108,7 @@ export default async function AdminPage() {
     display_name: p.display_name,
     avatar_url: p.avatar_url,
     role: (p.role ?? 'participant') as 'participant' | 'admin',
+    discord_user_id: p.discord_user_id ?? null,
     total_points: scoreMap.get(p.id)?.total_points ?? 0,
     total_points_groups: scoreMap.get(p.id)?.total_points_groups ?? 0,
     total_points_playoffs: scoreMap.get(p.id)?.total_points_playoffs ?? 0,

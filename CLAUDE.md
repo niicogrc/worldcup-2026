@@ -205,7 +205,16 @@ THESPORTSDB_KEY=3                 # '3' = key pública de test; registra una cue
 
 # Seguridad cron
 CRON_SECRET=                      # string aleatorio, mismo en Vercel y vercel.json
+
+# Notificaciones de Discord (opcional) — ver lib/notify/CLAUDE.md
+DISCORD_WEBHOOK_URL=              # webhook del canal; sin esta var el sync no notifica nada
+GEMINI_API_KEY=                  # opcional; free tier (aistudio.google.com/apikey). Sin ella → plantilla fija
+GEMINI_MODEL=gemini-2.0-flash    # opcional, default
 ```
+
+### Notificaciones de Discord
+
+Cuando el cron de sync (`/api/sync-matches`) hace terminar uno o más partidos, manda un mensaje a Discord con los resultados y el impacto en el ranking de cada porra. Si no acaba ningún partido en esa pasada, no envía nada. El texto lo redacta Gemini Flash (free tier) con fallback a plantilla fija. Es best-effort: nunca rompe el sync. Detalle en `lib/notify/CLAUDE.md`.
 
 ---
 
