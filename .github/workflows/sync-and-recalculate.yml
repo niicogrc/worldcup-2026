@@ -1,0 +1,49 @@
+name: Sync resultados y recalcular puntos
+
+# Corre cada 3 horas durante el torneo. GitHub Actions usa UTC.
+# También se puede lanzar a mano desde la pestaña Actions (workflow_dispatch).
+on:
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+
+# Evita solapamientos si una ejecución tarda más de lo previsto.
+concurrency:
+  group: sync-and-recalculate
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sincronizar resultados (TheSportsDB -> DB)
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          code=$(curl -sS -o /tmp/sync.json -w '%{http_code}' \
+            -X POST "$APP_URL/api/sync-matches" \
+            -H "Authorization: Bearer $CRON_SECRET")
+          echo "HTTP $code"
+          cat /tmp/sync.json
+          echo
+          if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+            echo "::error::sync-matches devolvió $code"
+            exit 1
+          fi
+
+      - name: Recalcular puntos (red de seguridad)
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          code=$(curl -sS -o /tmp/recalc.json -w '%{http_code}' \
+            -X POST "$APP_URL/api/admin/recalculate" \
+            -H "Authorization: Bearer $CRON_SECRET")
+          echo "HTTP $code"
+          cat /tmp/recalc.json
+          echo
+          if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+            echo "::error::recalculate devolvió $code"
+            exit 1
+          fi
