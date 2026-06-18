@@ -2,12 +2,13 @@
 
 ## Qué hay aquí
 
-Cinco migraciones:
+Seis migraciones:
 - `20260101000000_init.sql` — schema base (tablas, enums, triggers, vistas, RLS)
 - `20260102000000_add_porras.sql` — sistema multi-porra (ver sección "Porras" más abajo)
 - `20260103000000_global_lock.sql` — bloqueo global de predicciones 1h antes del primer partido (2026-06-11 18:00 UTC) + RLS para revelar predicciones tras el cierre
 - `20260104000000_fix_global_lock_award.sql` — fix crítico: el bloqueo global rechazaba el award de puntos del sistema (ver sección "Triggers")
 - `20260105000000_idempotent_scoring.sql` — puntuación idempotente y recálculo atómico (ver sección "Triggers"). Arregla que los puntos pudieran **bajar** tras un recálculo a medias o por inflación del trigger aditivo.
+- `20260106000000_fix_recompute_where_clause.sql` — fix: `recompute_all_scores()` tenía dos `UPDATE` sobre `scores` sin `WHERE` (reset por fase y bump de `updated_at`). La DB tiene safe-updates activado y los rechazaba → `/api/admin/recalculate` devolvía 500. Añade `where true`.
 
 > ⚠️ **Aviso de historia:** hubo una colisión de timestamp `20260103000000`. Una migración previa (`_fix_prediction_lock.sql`) compartía versión con `_global_lock.sql`, así que `db push` la dio por aplicada y nunca se ejecutó en prod. Quedó superada por `20260104000000_fix_global_lock_award.sql`. **No reutilices un timestamp ya existente.**
 
