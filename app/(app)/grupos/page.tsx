@@ -79,14 +79,6 @@ export default async function GruposPage({ searchParams }: { searchParams: Promi
     avatar_url: m.profiles?.avatar_url ?? null,
   }))
 
-  const { data: standings } = await supabase
-    .from('group_standings')
-    .select(`
-      *,
-      team:teams(id, name, flag_url, short_code)
-    `)
-    .order('position', { ascending: true })
-
   return (
     <div className="space-y-6">
       <div>
@@ -97,7 +89,6 @@ export default async function GruposPage({ searchParams }: { searchParams: Promi
       <GroupsClient
         initialMatches={matches || []}
         initialPredictions={predictions || []}
-        standings={standings || []}
         porraId={porraId}
         importablePorras={importablePorras}
         members={members}

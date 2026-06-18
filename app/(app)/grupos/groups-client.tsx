@@ -14,14 +14,10 @@ type MatchWithTeams = Database['public']['Tables']['matches']['Row'] & {
   away_team: { id: string; name: string; flag_url: string | null; group_letter: string | null; short_code: string | null } | null
 }
 type PredictionRow = Database['public']['Tables']['predictions']['Row']
-type StandingWithTeam = Database['public']['Tables']['group_standings']['Row'] & {
-  team: { id: string; name: string; flag_url: string | null; short_code: string | null } | null
-}
 
 interface GroupsClientProps {
   initialMatches: MatchWithTeams[]
   initialPredictions: PredictionRow[]
-  standings: StandingWithTeam[]
   porraId: string
   importablePorras: { id: string; name: string }[]
   members: PorraMember[]
@@ -29,15 +25,26 @@ interface GroupsClientProps {
   initialViewUserId?: string | null
 }
 
-const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
+const FINISHED_STATUSES = ['FT', 'AET', 'PEN']
 
 function formatKickoff(dateStr: string) {
   return new Date(dateStr).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
-export default function GroupsClient({ initialMatches, initialPredictions, standings, porraId, importablePorras, members, currentUserId, initialViewUserId }: GroupsClientProps) {
+// Agrupa una lista de partidos (ya ordenada) por día de kick-off.
+function groupByDay(matches: MatchWithTeams[]) {
+  return matches.reduce<{ date: string; matches: MatchWithTeams[] }[]>((acc, m) => {
+    const date = new Date(m.kickoff_at).toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: 'short' })
+    const last = acc[acc.length - 1]
+    if (last && last.date === date) last.matches.push(m)
+    else acc.push({ date, matches: [m] })
+    return acc
+  }, [])
+}
+
+export default function GroupsClient({ initialMatches, initialPredictions, porraId, importablePorras, members, currentUserId, initialViewUserId }: GroupsClientProps) {
   const router = useRouter()
-  const [selectedGroup, setSelectedGroup] = useState('A')
+  const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming')
   const [predictions, setPredictions] = useState<Record<string, MatchResult>>(
     initialPredictions.reduce((acc, p) => ({ ...acc, [p.match_id]: p.prediction }), {})
   )
@@ -55,21 +62,16 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
     loadingMemberId, viewError, viewMember,
   } = useMemberView(porraId, currentUserId, members, initialViewUserId)
 
-  const groupMatches = initialMatches.filter((m) => m.group_letter === selectedGroup)
-  const groupStandings = standings.filter((s) => s.group_letter === selectedGroup)
-
-  // Vista cronológica (al ver las predicciones de otro usuario): todos los
-  // partidos en orden de kick-off, agrupados por día.
+  // Vista única cronológica: todos los partidos en orden de kick-off, separados
+  // en dos tabs. "Próximos" = aún no finalizados (sin empezar o en juego);
+  // "Pasados" = finalizados (FT/AET/PEN). Cada tab se agrupa por día.
   const chronologicalMatches = [...initialMatches].sort(
     (a, b) => new Date(a.kickoff_at).getTime() - new Date(b.kickoff_at).getTime()
   )
-  const chronoGroups = chronologicalMatches.reduce<{ date: string; matches: MatchWithTeams[] }[]>((acc, m) => {
-    const date = new Date(m.kickoff_at).toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: 'short' })
-    const last = acc[acc.length - 1]
-    if (last && last.date === date) last.matches.push(m)
-    else acc.push({ date, matches: [m] })
-    return acc
-  }, [])
+  const upcomingMatches = chronologicalMatches.filter((m) => !FINISHED_STATUSES.includes(m.status))
+  const pastMatches = chronologicalMatches.filter((m) => FINISHED_STATUSES.includes(m.status))
+  const visibleMatches = activeTab === 'upcoming' ? upcomingMatches : pastMatches
+  const dayGroups = groupByDay(visibleMatches)
 
   const handlePredict = async (matchId: string, choice: MatchResult) => {
     const prev = predictions[matchId]
@@ -296,106 +298,55 @@ export default function GroupsClient({ initialMatches, initialPredictions, stand
         </div>
       )}
 
-      {isViewingOther ? (
-        /* Vista cronológica (predicciones de otro usuario, solo lectura) */
-        <div className="space-y-6">
-          <h2 className="text-sm font-medium text-zinc-500">Todos los partidos · orden cronológico</h2>
-
-          {chronologicalMatches.length === 0 && (
-            <div className="bg-[#13151c] border border-[#1f2333] rounded-xl p-8 text-center text-zinc-500 text-sm">
-              No hay partidos cargados. Ejecuta el seed.
-            </div>
+      {/* Tabs Próximos / Pasados */}
+      <div className="flex gap-1">
+        <button
+          onClick={() => setActiveTab('upcoming')}
+          className={clsx(
+            'px-4 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer',
+            activeTab === 'upcoming'
+              ? 'bg-blue-500 text-white shadow-sm shadow-blue-500/20'
+              : 'bg-[#13151c] border border-[#1f2333] text-zinc-400 hover:text-white hover:border-zinc-600'
           )}
+        >
+          Próximos
+          <span className="ml-1.5 text-xs opacity-70">{upcomingMatches.length}</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('past')}
+          className={clsx(
+            'px-4 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer',
+            activeTab === 'past'
+              ? 'bg-blue-500 text-white shadow-sm shadow-blue-500/20'
+              : 'bg-[#13151c] border border-[#1f2333] text-zinc-400 hover:text-white hover:border-zinc-600'
+          )}
+        >
+          Pasados
+          <span className="ml-1.5 text-xs opacity-70">{pastMatches.length}</span>
+        </button>
+      </div>
 
-          {chronoGroups.map((group) => (
-            <div key={group.date} className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-600 pt-1 first-letter:uppercase">{group.date}</h3>
-              {group.matches.map((match) => renderMatchCard(match))}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <>
-          {/* Group tabs */}
-          <div className="flex gap-1 flex-wrap">
-            {GROUPS.map((g) => (
-              <button
-                key={g}
-                onClick={() => setSelectedGroup(g)}
-                className={clsx(
-                  'px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer',
-                  selectedGroup === g
-                    ? 'bg-blue-500 text-white shadow-sm shadow-blue-500/20'
-                    : 'bg-[#13151c] border border-[#1f2333] text-zinc-400 hover:text-white hover:border-zinc-600'
-                )}
-              >
-                Grupo {g}
-              </button>
-            ))}
+      {/* Lista cronológica agrupada por día */}
+      <div className="space-y-6">
+        {chronologicalMatches.length === 0 && (
+          <div className="bg-[#13151c] border border-[#1f2333] rounded-xl p-8 text-center text-zinc-500 text-sm">
+            No hay partidos cargados. Ejecuta el seed.
           </div>
+        )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Matches */}
-            <div className="lg:col-span-2 space-y-3">
-              <h2 className="text-sm font-medium text-zinc-500">Partidos · Grupo {selectedGroup}</h2>
-
-              {groupMatches.length === 0 && (
-                <div className="bg-[#13151c] border border-[#1f2333] rounded-xl p-8 text-center text-zinc-500 text-sm">
-                  No hay partidos cargados. Ejecuta el seed.
-                </div>
-              )}
-
-              {groupMatches.map((match) => renderMatchCard(match))}
-            </div>
-
-            {/* Standings */}
-            <div>
-              <h2 className="text-sm font-medium text-zinc-500 mb-3">Clasificación · Grupo {selectedGroup}</h2>
-              <div className="bg-[#13151c] border border-[#1f2333] rounded-xl overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-[#1f2333] text-zinc-500 font-medium">
-                      <th className="py-2.5 px-3 text-center w-8">#</th>
-                      <th className="py-2.5 px-3 text-left">Equipo</th>
-                      <th className="py-2.5 px-2 text-center">PJ</th>
-                      <th className="py-2.5 px-2 text-center">DG</th>
-                      <th className="py-2.5 px-3 text-center">Pts</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {groupStandings.map((row) => (
-                      <tr key={row.id} className="border-b border-[#1f2333] last:border-0">
-                        <td className="py-2.5 px-3 text-center text-zinc-500">{row.position}</td>
-                        <td className="py-2.5 px-3">
-                          <div className="flex items-center gap-1.5">
-                            {row.team?.name && getFlagUrl(row.team.name) && (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={getFlagUrl(row.team.name)!} alt={row.team.name} className="w-5 h-3.5 object-cover rounded-sm flex-shrink-0" />
-                            )}
-                            <span className="font-medium text-white truncate max-w-[100px]">{row.team?.name}</span>
-                          </div>
-                        </td>
-                        <td className="py-2.5 px-2 text-center text-zinc-400 tabular-nums">{row.played}</td>
-                        <td className={clsx('py-2.5 px-2 text-center tabular-nums font-medium',
-                          row.goal_diff > 0 ? 'text-green-400' : row.goal_diff < 0 ? 'text-red-400' : 'text-zinc-400'
-                        )}>
-                          {row.goal_diff > 0 ? `+${row.goal_diff}` : row.goal_diff}
-                        </td>
-                        <td className="py-2.5 px-3 text-center font-bold text-white tabular-nums">{row.points}</td>
-                      </tr>
-                    ))}
-                    {groupStandings.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="py-6 text-center text-zinc-600">Sin datos</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+        {chronologicalMatches.length > 0 && visibleMatches.length === 0 && (
+          <div className="bg-[#13151c] border border-[#1f2333] rounded-xl p-8 text-center text-zinc-500 text-sm">
+            {activeTab === 'upcoming' ? 'No quedan partidos por jugar.' : 'Aún no hay partidos finalizados.'}
           </div>
-        </>
-      )}
+        )}
+
+        {dayGroups.map((group) => (
+          <div key={group.date} className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-600 pt-1 first-letter:uppercase">{group.date}</h3>
+            {group.matches.map((match) => renderMatchCard(match))}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

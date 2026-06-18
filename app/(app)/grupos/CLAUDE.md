@@ -2,7 +2,11 @@
 
 ## Qué hace esta pantalla
 
-Permite a cada usuario predecir el resultado (1, X o 2) de los 72 partidos de la fase de grupos del Mundial 2026, organizados en 12 grupos (A–L). También muestra la clasificación actualizada de cada grupo.
+Permite a cada usuario predecir el resultado (1, X o 2) de los 72 partidos de la fase de grupos del Mundial 2026. **Todos los partidos se muestran en una única lista en orden cronológico** (por `kickoff_at`), agrupados por día. No hay división por grupos (A–L) ni tabla de clasificación.
+
+La vista se divide en dos pestañas:
+- **Próximos** (por defecto): partidos aún no finalizados (sin empezar o en juego).
+- **Pasados**: partidos finalizados (`status` en `FT`/`AET`/`PEN`).
 
 ---
 
@@ -11,7 +15,7 @@ Permite a cada usuario predecir el resultado (1, X o 2) de los 72 partidos de la
 | Archivo | Tipo | Responsabilidad |
 |---|---|---|
 | `page.tsx` | Server Component | Fetcha datos de Supabase y pasa props al cliente |
-| `groups-client.tsx` | Client Component (`"use client"`) | Toda la interactividad: tabs de grupo, botones 1/X/2, guardado optimista |
+| `groups-client.tsx` | Client Component (`"use client"`) | Toda la interactividad: tabs Próximos/Pasados, lista cronológica por día, botones 1/X/2, guardado optimista |
 
 ---
 
@@ -19,12 +23,11 @@ Permite a cada usuario predecir el resultado (1, X o 2) de los 72 partidos de la
 
 ```
 page.tsx (servidor)
-  ├── supabase.from('matches').select(...).eq('phase','group')   → 72 partidos con equipos locales/visitantes
-  ├── supabase.from('predictions').select('*').eq('user_id',...)  → predicciones ya guardadas del usuario
-  └── supabase.from('group_standings').select(...)               → tabla de clasificación por grupo
+  ├── supabase.from('matches').select(...).eq('phase','group').order('kickoff_at')  → 72 partidos con equipos
+  └── supabase.from('predictions').select('*').eq('user_id',...)                    → predicciones del usuario
 
   → Props a GroupsClient:
-      initialMatches, initialPredictions, standings
+      initialMatches, initialPredictions
 ```
 
 El **Server Component** usa `export const dynamic = 'force-dynamic'` para que Next.js no cachee la página (los partidos y predicciones cambian frecuentemente).
@@ -44,7 +47,7 @@ Tras importar se muestra un mensaje verde con el número de predicciones copiada
 
 ## Ver predicciones de otros miembros
 
-Encima de los tabs de grupo hay un selector de miembros de la porra activa ("Viendo predicciones de: Tú / …"). Implementado con el hook compartido `useMemberView` (`lib/hooks/use-member-view.ts`) y el componente `MemberViewBar` (`components/porra/member-view-bar.tsx`), reutilizados también en playoffs. Al seleccionar a otro miembro:
+Encima de las pestañas Próximos/Pasados hay un selector de miembros de la porra activa ("Viendo predicciones de: Tú / …"). Implementado con el hook compartido `useMemberView` (`lib/hooks/use-member-view.ts`) y el componente `MemberViewBar` (`components/porra/member-view-bar.tsx`), reutilizados también en playoffs. La vista cronológica es la misma tanto para tus predicciones como para las de otro miembro; al seleccionar a otro miembro:
 
 - Se hace `GET /api/porras/{porraId}/predictions?userId={userId}` y se cachea la respuesta en el hook, un fetch por miembro.
 - La vista pasa a **solo lectura**: los botones 1/X/2 se deshabilitan y muestran la elección del otro usuario.
@@ -98,14 +101,6 @@ El botón se deshabilita con `disabled={isLocked}`. El servidor también valida 
 
 ---
 
-## Tabla de clasificación
-
-Se muestra a la derecha (layout de 3 columnas en desktop, apilado en móvil). Los datos vienen de `group_standings`, que Supabase actualiza al hacer sync con API-Football.
-
-Columnas: Pos, Equipo, PJ (partidos jugados), DG (diferencia de goles), Pts.
-
----
-
 ## Banderas
 
 Las banderas se obtienen de `lib/flags.ts` con `getFlagUrl(teamName)`. Si el equipo no está en el mapa, muestra el código corto del equipo (ej. `ESP`). La URL tiene el formato `https://flagcdn.com/w40/{code}.png`.
@@ -123,11 +118,6 @@ type MatchWithTeams = Database['public']['Tables']['matches']['Row'] & {
 
 // Una predicción del usuario
 type PredictionRow = Database['public']['Tables']['predictions']['Row']
-
-// Una fila de clasificación con el equipo unido
-type StandingWithTeam = Database['public']['Tables']['group_standings']['Row'] & {
-  team: { id, name, flag_url, short_code } | null
-}
 ```
 
 ---
