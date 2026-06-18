@@ -13,6 +13,7 @@ Módulos de utilidad compartidos por toda la aplicación. No contienen lógica d
 | `flags.ts` | Mapa de nombre de equipo → URL de bandera |
 | `players.ts` | Lista de jugadores candidatos a Bota de Oro |
 | `thesportsdb/` | Cliente HTTP de TheSportsDB + lógica de sync (`client.ts` + `sync.ts`) — fuente de resultados del torneo (ver su propio CLAUDE.md) |
+| `notify/` | Notificación a Discord (narrada por Gemini) cuando el sync hace terminar partidos (ver su propio CLAUDE.md) |
 | `supabase/` | Clientes de Supabase + tipos (ver su propio CLAUDE.md) |
 
 ---

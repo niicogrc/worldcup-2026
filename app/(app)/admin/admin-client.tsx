@@ -13,6 +13,7 @@ interface UserRow {
   display_name: string
   avatar_url: string | null
   role: 'participant' | 'admin'
+  discord_user_id: string | null
   total_points: number
   total_points_groups: number
   total_points_playoffs: number
@@ -183,6 +184,54 @@ function Toast({ message, type }: { message: string; type: 'ok' | 'err' }) {
 
 // ─── Tab: Usuarios ────────────────────────────────────────────────────────────
 
+// Inline editor for a user's Discord ID. Saves on blur when the value changed.
+function DiscordIdCell({ user, onToast }: { user: UserRow; onToast: (msg: string, type: 'ok' | 'err') => void }) {
+  const router = useRouter()
+  const [value, setValue] = useState(user.discord_user_id ?? '')
+  const [saving, setSaving] = useState(false)
+
+  const save = async () => {
+    const next = value.trim()
+    if (next === (user.discord_user_id ?? '')) return // sin cambios
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ discord_user_id: next }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error desconocido')
+      onToast(`Discord ID de "${user.display_name}" guardado`, 'ok')
+      router.refresh()
+    } catch (e: any) {
+      onToast(e.message, 'err')
+      setValue(user.discord_user_id ?? '') // revertir
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="relative">
+      <input
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onBlur={save}
+        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+        disabled={saving}
+        placeholder="ID numérico"
+        className="w-40 bg-[#1f2333] border border-[#2a2f42] text-white text-xs font-mono rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+      />
+      {saving && (
+        <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none">
+          <Loader2 className="w-3 h-3 animate-spin text-zinc-400" />
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TabUsuarios({ users, currentUserId, onToast }: { users: UserRow[]; currentUserId: string; onToast: (msg: string, type: 'ok' | 'err') => void }) {
   const router = useRouter()
   const [confirmId, setConfirmId] = useState<string | null>(null)
@@ -238,6 +287,7 @@ function TabUsuarios({ users, currentUserId, onToast }: { users: UserRow[]; curr
               <th className="text-right px-4 py-3">Playoffs</th>
               <th className="text-right px-4 py-3">Bota de Oro</th>
               <th className="text-right px-4 py-3 font-bold text-white">Total</th>
+              <th className="text-left px-4 py-3">Discord ID</th>
               <th className="text-left px-4 py-3">Rol</th>
               <th className="px-4 py-3" />
             </tr>
@@ -258,6 +308,9 @@ function TabUsuarios({ users, currentUserId, onToast }: { users: UserRow[]; curr
                 <td className="px-4 py-3 text-right text-zinc-300">{u.total_points_playoffs}</td>
                 <td className="px-4 py-3 text-right text-zinc-300">{u.points_golden_boot}</td>
                 <td className="px-4 py-3 text-right text-blue-400 font-bold text-base">{u.total_points}</td>
+                <td className="px-4 py-3">
+                  <DiscordIdCell user={u} onToast={onToast} />
+                </td>
                 <td className="px-4 py-3">
                   {u.id === currentUserId ? (
                     <span className="text-xs text-zinc-500">—</span>
