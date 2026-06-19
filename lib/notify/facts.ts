@@ -44,11 +44,19 @@ const RESULT_LABELS: Record<string, string> = {
 
 // Build the facts object from the updated matches and the before/after
 // leaderboard snapshots. Only porras whose ranking actually moved are included.
+// porraWhitelist: if set, only porras whose name contains one of the strings
+// (case-insensitive) are included. Reads DISCORD_PORRA_WHITELIST env var when
+// the argument is not provided.
 export function buildFacts(
   matches: MatchUpdate[],
   before: LeaderboardRow[],
   after: LeaderboardRow[],
+  porraWhitelist?: string[],
 ): NotifyFacts {
+  const whitelist: string[] | undefined = porraWhitelist
+    ?? (process.env.DISCORD_PORRA_WHITELIST
+        ? process.env.DISCORD_PORRA_WHITELIST.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0)
+        : undefined)
   const matchFacts = matches.map((m) => ({
     label: `${m.homeTeam} ${m.homeScore}-${m.awayScore} ${m.awayTeam}`,
     phase: PHASE_LABELS[m.phase] ?? m.phase,
@@ -71,6 +79,10 @@ export function buildFacts(
 
   const porras: NotifyFacts['porras'] = []
   for (const [porraId, { name, rows }] of byPorra) {
+    if (whitelist && whitelist.length > 0) {
+      const nameLower = name.toLowerCase()
+      if (!whitelist.some((w: string) => nameLower.includes(w.toLowerCase()))) continue
+    }
     rows.sort((a, b) => a.position - b.position)
     const leader = rows[0] ? { mention: mentionOf(rows[0]), points: rows[0].totalPoints } : null
 

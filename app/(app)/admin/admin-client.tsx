@@ -59,6 +59,7 @@ interface SyncLog {
   error_message: string | null
   duration_ms: number | null
   triggered_by: string | null
+  discord_message_id: string | null
 }
 
 interface GoldenBootPrediction {
@@ -656,6 +657,8 @@ function TabPartidos({ matches, teams, onSaved, onError }: { matches: MatchRow[]
 function TabSync({ syncLogs, onToast }: { syncLogs: SyncLog[]; onToast: (msg: string, type: 'ok' | 'err') => void }) {
   const router = useRouter()
   const [syncing, setSyncing] = useState(false)
+  const [resending, setResending] = useState(false)
+  const [manualMsgId, setManualMsgId] = useState('')
 
   const handleSync = async () => {
     setSyncing(true)
@@ -667,6 +670,27 @@ function TabSync({ syncLogs, onToast }: { syncLogs: SyncLog[]; onToast: (msg: st
       onToast(e.message, 'err')
     } finally {
       setSyncing(false)
+    }
+  }
+
+  // Último mensaje de Discord conocido (del historial de sync_logs)
+  const lastDiscordMsgId = syncLogs.find(l => l.discord_message_id)?.discord_message_id ?? null
+
+  const handleResendDiscord = async () => {
+    setResending(true)
+    try {
+      const deleteMessageId = manualMsgId.trim() || lastDiscordMsgId || undefined
+      await apiFetch('/api/admin/discord-notify', { deleteMessageId, hoursBack: 24 })
+      onToast(
+        `Discord · ${deleteMessageId ? 'mensaje anterior borrado · ' : ''}nuevo mensaje enviado`,
+        'ok',
+      )
+      setManualMsgId('')
+      router.refresh()
+    } catch (e: any) {
+      onToast(e.message, 'err')
+    } finally {
+      setResending(false)
     }
   }
 
@@ -682,6 +706,35 @@ function TabSync({ syncLogs, onToast }: { syncLogs: SyncLog[]; onToast: (msg: st
           Sincronizar resultados ahora
         </button>
         <p className="text-zinc-500 text-xs">Llama a API-Football y actualiza partidos del día (1 llamada API)</p>
+      </div>
+
+      {/* Reenviar notificación Discord */}
+      <div className="rounded-xl border border-[#1f2333] p-4 space-y-3">
+        <p className="text-white font-semibold text-sm">Borrar y reenviar notificación Discord</p>
+        <p className="text-zinc-500 text-xs">
+          Borra el último mensaje enviado y reenvía la notificación de las últimas 24h filtrada por{' '}
+          <code className="text-zinc-300">DISCORD_PORRA_WHITELIST</code>.
+          {lastDiscordMsgId && (
+            <span className="block mt-0.5 text-zinc-600">Último msg guardado: <span className="font-mono">{lastDiscordMsgId}</span></span>
+          )}
+        </p>
+        <div className="flex gap-2 flex-wrap">
+          <input
+            type="text"
+            value={manualMsgId}
+            onChange={e => setManualMsgId(e.target.value)}
+            placeholder={lastDiscordMsgId ? `ID automático: ${lastDiscordMsgId}` : 'ID del mensaje a borrar (opcional)'}
+            className="flex-1 min-w-0 bg-[#13151c] border border-[#1f2333] text-zinc-300 text-xs rounded-lg px-3 py-2 placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
+          />
+          <button
+            onClick={handleResendDiscord}
+            disabled={resending}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-600/30 text-indigo-400 text-sm font-medium rounded-lg transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+          >
+            {resending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            Borrar y reenviar
+          </button>
+        </div>
       </div>
 
       <div className="rounded-xl border border-[#1f2333] overflow-hidden">

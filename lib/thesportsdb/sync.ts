@@ -149,9 +149,11 @@ async function syncDates(dates: string[]): Promise<SyncResult> {
 
     // Only notify when at least one match actually finished this run. The DB
     // trigger has already awarded points, so the "after" snapshot reflects them.
+    let discordMessageId: string | null = null
     if (wantNotify && totals.updates.length > 0) {
       const after = await snapshotLeaderboard(supabase)
-      await notifyMatchResults({ matches: totals.updates, before, after })
+      const result = await notifyMatchResults({ matches: totals.updates, before, after })
+      discordMessageId = result.messageId
     }
 
     const durationMs = Date.now() - startTime
@@ -161,6 +163,7 @@ async function syncDates(dates: string[]): Promise<SyncResult> {
       api_calls_used: dates.length,
       duration_ms: durationMs,
       triggered_by: 'cron',
+      discord_message_id: discordMessageId,
     })
 
     return {
