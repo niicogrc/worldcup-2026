@@ -13,12 +13,25 @@ export interface LeaderboardRow {
 
 // Snapshot the full leaderboard (every porra) at a point in time. Used to diff
 // before/after a sync and report who gained points / climbed the ranking.
+// If DISCORD_NOTIFY_PORRA_IDS is set (comma-separated porra UUIDs), only those
+// porras are included in Discord notifications. Unset = notify all.
+function getAllowedPorraIds(): Set<string> | null {
+  const raw = process.env.DISCORD_NOTIFY_PORRA_IDS
+  if (!raw) return null
+  const ids = raw.split(',').map((s) => s.trim()).filter(Boolean)
+  return ids.length > 0 ? new Set(ids) : null
+}
+
 export async function snapshotLeaderboard(
   supabase: ReturnType<typeof createAdminClient>,
 ): Promise<LeaderboardRow[]> {
   const { data: porras } = await (supabase.from('porras') as any).select('id, name')
+  const allowed = getAllowedPorraIds()
+  const filteredPorras = allowed
+    ? (porras ?? []).filter((p: any) => allowed.has(p.id))
+    : (porras ?? [])
   const porraName = new Map<string, string>(
-    (porras ?? []).map((p: any) => [p.id as string, p.name as string]),
+    filteredPorras.map((p: any) => [p.id as string, p.name as string]),
   )
 
   // Discord IDs live on profiles, not on the leaderboard view; resolve them by user.
@@ -32,13 +45,15 @@ export async function snapshotLeaderboard(
   )
   if (error || !data) return []
 
-  return (data as any[]).map((r) => ({
-    porraId: r.porra_id,
-    porraName: porraName.get(r.porra_id) ?? 'Porra',
-    userId: r.user_id,
-    displayName: r.display_name ?? 'Anónimo',
-    discordUserId: discordId.get(r.user_id) ?? null,
-    totalPoints: r.total_points ?? 0,
-    position: r.position ?? 0,
-  }))
+  return (data as any[])
+    .filter((r) => porraName.has(r.porra_id))
+    .map((r) => ({
+      porraId: r.porra_id,
+      porraName: porraName.get(r.porra_id) ?? 'Porra',
+      userId: r.user_id,
+      displayName: r.display_name ?? 'Anónimo',
+      discordUserId: discordId.get(r.user_id) ?? null,
+      totalPoints: r.total_points ?? 0,
+      position: r.position ?? 0,
+    }))
 }
