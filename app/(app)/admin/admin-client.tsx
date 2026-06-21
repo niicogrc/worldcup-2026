@@ -567,6 +567,7 @@ function MatchEditRow({ match, teams, onSaved, onError }: { match: MatchRow; tea
 function TabPartidos({ matches, teams, onSaved, onError }: { matches: MatchRow[]; teams: TeamOption[]; onSaved: () => void; onError: (msg: string) => void }) {
   const [filterPhase, setFilterPhase] = useState<string>('all')
   const [filterStatus, setFilterStatus] = useState<string>('all')
+  const [search, setSearch] = useState<string>('')
   const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set(['group']))
 
   const togglePhase = (phase: string) => {
@@ -578,10 +579,17 @@ function TabPartidos({ matches, teams, onSaved, onError }: { matches: MatchRow[]
     })
   }
 
+  const searchLower = search.trim().toLowerCase()
+
   const filtered = matches.filter(m => {
     if (filterPhase !== 'all' && m.phase !== filterPhase) return false
     if (filterStatus === 'played' && !m.result_ft) return false
     if (filterStatus === 'pending' && m.result_ft) return false
+    if (searchLower) {
+      const home = teamLabel(m.home_team).toLowerCase()
+      const away = teamLabel(m.away_team).toLowerCase()
+      if (!home.includes(searchLower) && !away.includes(searchLower)) return false
+    }
     return true
   })
 
@@ -611,6 +619,19 @@ function TabPartidos({ matches, teams, onSaved, onError }: { matches: MatchRow[]
             <option value="played">Con resultado</option>
             <option value="pending">Sin resultado</option>
           </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-zinc-500 text-xs uppercase">Buscar equipo</label>
+          <input
+            type="text"
+            value={search}
+            onChange={e => {
+              setSearch(e.target.value)
+              if (e.target.value.trim()) setExpandedPhases(new Set(PHASE_ORDER))
+            }}
+            placeholder="ej. Switzerland"
+            className="bg-[#1f2333] border border-[#2a2f42] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 placeholder-zinc-600 w-48"
+          />
         </div>
         <div className="ml-auto flex items-end text-zinc-500 text-xs">
           {filtered.length} partidos
@@ -681,7 +702,7 @@ function TabSync({ syncLogs, onToast }: { syncLogs: SyncLog[]; onToast: (msg: st
           {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
           Sincronizar resultados ahora
         </button>
-        <p className="text-zinc-500 text-xs">Llama a API-Football y actualiza partidos del día (1 llamada API)</p>
+        <p className="text-zinc-500 text-xs">Llama a TheSportsDB y actualiza partidos del día (ayer + hoy)</p>
       </div>
 
       <div className="rounded-xl border border-[#1f2333] overflow-hidden">

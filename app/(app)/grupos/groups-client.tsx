@@ -224,9 +224,9 @@ export default function GroupsClient({ initialMatches, initialPredictions, porra
               {isLocked ? 'Predicciones cerradas' : 'Abierto para predecir'}
             </span>
           )}
-          {isFinished && wasCorrect !== null && (
-            <span className={clsx('text-[11px] font-semibold', wasCorrect ? 'text-green-400' : 'text-zinc-600')}>
-              {wasCorrect ? '✓ +3 pts' : '✗ +0 pts'}
+          {isFinished && predRow !== undefined && predRow.is_correct !== null && (
+            <span className={clsx('text-[11px] font-semibold', predRow.is_correct ? 'text-green-400' : 'text-zinc-600')}>
+              {predRow.is_correct ? `✓ +${predRow.points_awarded ?? 0} pts` : '✗ +0 pts'}
             </span>
           )}
         </div>
