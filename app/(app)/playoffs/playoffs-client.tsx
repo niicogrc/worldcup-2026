@@ -199,7 +199,6 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
         viewingUserId={viewingUserId}
         loadingMemberId={loadingMemberId}
         onView={viewMember}
-        viewedName={viewedMember?.display_name}
       />
 
       {viewError && (
