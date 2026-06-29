@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { SingleEliminationBracket, SVGViewer } from '@g-loot/react-tournament-brackets'
 import { Database, MatchResult, TournamentPhase } from '@/lib/supabase/types'
 import { getFlagUrl } from '@/lib/flags'
-import { X, AlertCircle, Lock, Check } from 'lucide-react'
+import { X, AlertCircle, Lock } from 'lucide-react'
 import { clsx } from 'clsx'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useMemberView, PorraMember } from '@/lib/hooks/use-member-view'
@@ -176,9 +176,8 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
     initialPredictions.reduce((acc, p) => (p.advance_side ? { ...acc, [p.match_id]: p.advance_side as AdvanceSide } : acc), {})
   )
   const [activePredictMatch, setActivePredictMatch] = useState<MatchWithTeams | null>(null)
-  // Estado del modal: lado que avanza + si fue empate a 90' (penaltis)
+  // Estado del modal: lado que avanza
   const [modalSide, setModalSide] = useState<AdvanceSide | null>(null)
-  const [modalDraw, setModalDraw] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -240,17 +239,17 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
   const openMatch = (m: MatchWithTeams) => {
     const pred = predictions[m.id]
     const adv = advanceSides[m.id]
-    // lado que avanza: el guardado, o derivado de 1/2; X sin advance → null
+    // lado que avanza: el guardado, o derivado de 1/2
     const side: AdvanceSide | null = adv ?? (pred === '1' ? '1' : pred === '2' ? '2' : null)
     setModalSide(side)
-    setModalDraw(pred === 'X')
     setError(null)
     setActivePredictMatch(m)
   }
 
   const handlePredictSubmit = async () => {
     if (!activePredictMatch || !modalSide) return
-    const prediction: MatchResult = modalDraw ? 'X' : modalSide
+    // Solo se elige quién pasa: la predicción es ese lado (1/2), sin empates.
+    const prediction: MatchResult = modalSide
     const advanceSide = modalSide
     setSaving(true)
     setError(null)
@@ -329,9 +328,9 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
         </div>
         {hasPick && !isFinished && (
           <div className="mt-1.5 pt-1 border-t border-[#1f2333] text-[9px] flex justify-between">
-            <span className="text-zinc-600">{pred === 'X' ? 'Empate 90′ + pen.' : 'Pasa'}</span>
+            <span className="text-zinc-600">Pasa</span>
             <span className="text-blue-400 font-semibold">
-              {pred === 'X' ? 'X' : pred === '1' ? '1' : '2'}
+              {advSide === '1' ? '1' : advSide === '2' ? '2' : pred === '1' ? '1' : '2'}
             </span>
           </div>
         )}
@@ -369,7 +368,6 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
       {!isViewingOther && (
         <div className="px-4 py-3 bg-blue-500/5 border border-blue-500/20 text-blue-300/90 rounded-lg text-xs leading-relaxed">
           Elige en cada cruce <strong>qué equipo pasa</strong> y se rellenará automáticamente la siguiente ronda — puedes predecir todo el cuadro de una vez.
-          Si crees que será empate a 90′, márcalo: puntúa <strong>X</strong> pero el equipo que elijas seguirá avanzando (penaltis).
         </div>
       )}
 
@@ -542,38 +540,7 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
                     <TeamPickButton team={modalAway} selected={modalSide === '2'} disabled={saving} onPick={() => setModalSide('2')} />
                   </div>
 
-                  {activePredictMatch.phase !== 'third_place' && (
-                    <button
-                      type="button"
-                      disabled={saving}
-                      onClick={() => setModalDraw((d) => !d)}
-                      className={clsx(
-                        'w-full flex items-center gap-2.5 p-3 rounded-lg border text-left text-xs transition-all cursor-pointer disabled:opacity-50',
-                        modalDraw
-                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-                          : 'bg-[#0c0d12] border-[#1f2333] text-zinc-400 hover:border-[#2a2f42]'
-                      )}
-                    >
-                      <span className={clsx(
-                        'w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border',
-                        modalDraw ? 'bg-amber-500 border-amber-500' : 'border-[#2a2f42]'
-                      )}>
-                        {modalDraw && <Check className="w-3 h-3 text-black" />}
-                      </span>
-                      <span>
-                        Empate a 90′ — pasa en penaltis.{' '}
-                        <span className="opacity-70">Puntúa <strong>X</strong>, el equipo elegido avanza igual.</span>
-                      </span>
-                    </button>
-                  )}
-
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <span className="text-[11px] text-zinc-500">
-                      Puntúa:{' '}
-                      <span className="text-zinc-300 font-semibold">
-                        {!modalSide ? '—' : modalDraw ? 'X (empate 90′)' : modalSide === '1' ? '1 (gana local)' : '2 (gana visitante)'}
-                      </span>
-                    </span>
+                  <div className="flex items-center justify-end pt-1">
                     <button
                       type="button"
                       disabled={saving || !modalSide}
