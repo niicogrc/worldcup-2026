@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { MatchResult } from '@/lib/supabase/types'
 
 export type PorraMember = { user_id: string; display_name: string; avatar_url: string | null }
-export type ViewedPrediction = { match_id: string; prediction: MatchResult; is_correct: boolean | null; points_awarded: number | null }
+export type ViewedPrediction = { match_id: string; prediction: MatchResult; advance_side?: '1' | '2' | null; is_correct: boolean | null; points_awarded: number | null }
 
 // Estado y fetch para ver las predicciones de otro miembro de la porra.
 // Las respuestas se cachean por usuario (un fetch por miembro).
@@ -19,6 +19,11 @@ export function useMemberView(porraId: string, currentUserId: string, members: P
   const viewedRows = isViewingOther ? (viewedCache[viewingUserId!] ?? []) : []
   const viewedPredictions = viewedRows.reduce<Record<string, MatchResult>>(
     (acc, p) => ({ ...acc, [p.match_id]: p.prediction }),
+    {}
+  )
+  // Mapa match_id → lado que avanza (cascada de playoffs), para el miembro visto.
+  const viewedAdvanceSides = viewedRows.reduce<Record<string, '1' | '2'>>(
+    (acc, p) => (p.advance_side ? { ...acc, [p.match_id]: p.advance_side } : acc),
     {}
   )
 
@@ -53,5 +58,5 @@ export function useMemberView(porraId: string, currentUserId: string, members: P
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialUserId])
 
-  return { viewingUserId, isViewingOther, viewedMember, viewedRows, viewedPredictions, loadingMemberId, viewError, viewMember }
+  return { viewingUserId, isViewingOther, viewedMember, viewedRows, viewedPredictions, viewedAdvanceSides, loadingMemberId, viewError, viewMember }
 }

@@ -31,7 +31,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const { data, error } = await (supabase as any)
       .from('predictions')
-      .select('match_id, prediction, is_correct, points_awarded')
+      .select('match_id, prediction, advance_side, is_correct, points_awarded')
       .eq('porra_id', porraId)
       .eq('user_id', userId)
 

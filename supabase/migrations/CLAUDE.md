@@ -2,7 +2,7 @@
 
 ## Qué hay aquí
 
-Ocho migraciones:
+Nueve migraciones:
 - `20260101000000_init.sql` — schema base (tablas, enums, triggers, vistas, RLS)
 - `20260102000000_add_porras.sql` — sistema multi-porra (ver sección "Porras" más abajo)
 - `20260103000000_global_lock.sql` — bloqueo global de predicciones 1h antes del primer partido (2026-06-11 18:00 UTC) + RLS para revelar predicciones tras el cierre
@@ -10,6 +10,7 @@ Ocho migraciones:
 - `20260105000000_idempotent_scoring.sql` — puntuación idempotente y recálculo atómico (ver sección "Triggers"). Arregla que los puntos pudieran **bajar** tras un recálculo a medias o por inflación del trigger aditivo.
 - `20260106000000_fix_recompute_where_clause.sql` — fix: `recompute_all_scores()` tenía dos `UPDATE` sobre `scores` sin `WHERE` (reset por fase y bump de `updated_at`). La DB tiene safe-updates activado y los rechazaba → `/api/admin/recalculate` devolvía 500. Añade `where true`.
 - `20260107000000_add_discord_user_id.sql` — añade `discord_user_id` a `profiles` para mencionar usuarios en las notificaciones de Discord.
+- `20260109000000_add_advance_side.sql` — añade `predictions.advance_side` (`'1'`/`'2'`, nullable) para la **cascada del cuadro de playoffs**: qué lado avanza a la siguiente ronda. En empates a 90' (`prediction='X'`) indica el ganador en penaltis. No afecta a los puntos; NULL en grupos. Ver `app/(app)/playoffs/CLAUDE.md`.
 - `20260108000000_unlock_playoff_predictions.sql` — reabre las predicciones de **eliminatorias** (el cuadro nunca se predijo antes del cierre global). Grupos siguen cerrados desde el 11 jun; las eliminatorias vuelven al bloqueo por kick-off de cada partido. Cambia la política RLS de INSERT y el trigger `lock_predictions_at_kickoff` para diferenciar por fase.
 
 > ⚠️ **Aviso de historia:** hubo una colisión de timestamp `20260103000000`. Una migración previa (`_fix_prediction_lock.sql`) compartía versión con `_global_lock.sql`, así que `db push` la dio por aplicada y nunca se ejecutó en prod. Quedó superada por `20260104000000_fix_global_lock_award.sql`. **No reutilices un timestamp ya existente.**
@@ -125,7 +126,8 @@ Una fila por (user_id, match_id). UNIQUE constraint en ambos campos.
 |---|---|---|
 | `user_id` | UUID FK → profiles | El usuario |
 | `match_id` | UUID FK → matches | El partido |
-| `prediction` | match_result | '1', 'X' o '2' |
+| `prediction` | match_result | '1', 'X' o '2' (lo que puntúa) |
+| `advance_side` | char(1) | Cascada playoffs: qué lado pasa ('1'/'2'). NULL en grupos. No puntúa |
 | `is_locked` | boolean | true tras el kick-off |
 | `is_correct` | boolean | Calculado por trigger al finalizar el partido |
 | `points_awarded` | integer | Puntos obtenidos (0 o según la ronda) |

@@ -4,17 +4,22 @@ import React, { useState } from 'react'
 import { SingleEliminationBracket, SVGViewer } from '@g-loot/react-tournament-brackets'
 import { Database, MatchResult, TournamentPhase } from '@/lib/supabase/types'
 import { getFlagUrl } from '@/lib/flags'
-import { X, AlertCircle, Lock } from 'lucide-react'
+import { X, AlertCircle, Lock, Check } from 'lucide-react'
 import { clsx } from 'clsx'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useMemberView, PorraMember } from '@/lib/hooks/use-member-view'
 import MemberViewBar from '@/components/porra/member-view-bar'
+import { BRACKET_SOURCES, THIRD_PLACE_SOURCES, NEXT_MATCH } from '@/lib/playoffs/bracket'
 
+type TeamRef = { id: string; name: string; flag_url: string | null; short_code: string | null }
 type MatchWithTeams = Database['public']['Tables']['matches']['Row'] & {
-  home_team: { id: string; name: string; flag_url: string | null; short_code: string | null } | null
-  away_team: { id: string; name: string; flag_url: string | null; short_code: string | null } | null
+  home_team: TeamRef | null
+  away_team: TeamRef | null
 }
 type PredictionRow = Database['public']['Tables']['predictions']['Row']
+type AdvanceSide = '1' | '2'
+/** Equipo resuelto en un hueco del cuadro (real o derivado de la cascada). */
+type ResolvedTeam = { id: string | null; name: string; short_code: string | null } | null
 
 interface PlayoffsClientProps {
   initialMatches: MatchWithTeams[]
@@ -34,89 +39,233 @@ const PHASE_NAMES: Record<TournamentPhase, string> = {
   final: 'Gran Final',
 }
 
+const ROUND_TEXT: Partial<Record<TournamentPhase, string>> = {
+  round_of_32: 'Dieciseisavos',
+  round_of_16: 'Octavos',
+  quarter_final: 'Cuartos',
+  semi_final: 'Semifinales',
+  final: 'Final',
+}
+
+const FINISHED = ['FT', 'AET', 'PEN']
+const LIVE = ['1H', 'HT', '2H', 'ET', 'P']
+
+function teamFromRef(t: TeamRef | null): ResolvedTeam {
+  return t ? { id: t.id, name: t.name, short_code: t.short_code } : null
+}
+
+/**
+ * Construye un resolutor de la cascada del cuadro a partir de las picks dadas.
+ * Para cada hueco devuelve el equipo que lo ocupa: el real si ya se conoce,
+ * o el ganador predicho del cruce anterior (recursivo). Memoiza por render.
+ */
+function buildResolver(
+  byNumber: Record<number, MatchWithTeams>,
+  predictions: Record<string, MatchResult>,
+  advanceSides: Record<string, AdvanceSide>,
+) {
+  const advancerCache = new Map<number, ResolvedTeam>()
+
+  function slot(n: number, side: 'home' | 'away'): ResolvedTeam {
+    const m = byNumber[n]
+    if (!m) return null
+    // La realidad manda: si el hueco ya tiene equipo asignado en la DB, ese.
+    const dbTeam = side === 'home' ? m.home_team : m.away_team
+    if (dbTeam) return teamFromRef(dbTeam)
+    if (m.phase === 'round_of_32') return null // sin equipo aún → TBD
+    if (m.phase === 'third_place') {
+      return loser(side === 'home' ? THIRD_PLACE_SOURCES.home : THIRD_PLACE_SOURCES.away)
+    }
+    const src = BRACKET_SOURCES[m.match_number ?? -1]
+    if (!src) return null
+    return advancer(side === 'home' ? src.home : src.away)
+  }
+
+  /** Equipo que AVANZA del cruce n según la cascada (o el resultado real). */
+  function advancer(n: number): ResolvedTeam {
+    if (advancerCache.has(n)) return advancerCache.get(n)!
+    advancerCache.set(n, null) // guard anti-ciclos
+    const m = byNumber[n]
+    let result: ResolvedTeam = null
+    if (m) {
+      const home = slot(n, 'home')
+      const away = slot(n, 'away')
+      if (FINISHED.includes(m.status)) {
+        // Avance real: ganador a 90'; si X, penaltis (si están en la DB).
+        if (m.result_ft === '1') result = home
+        else if (m.result_ft === '2') result = away
+        else if (m.result_ft === 'X') {
+          if (m.home_goals_pen != null && m.away_goals_pen != null) {
+            result = m.home_goals_pen >= m.away_goals_pen ? home : away
+          } else {
+            const side = advanceSides[m.id]
+            result = side === '1' ? home : side === '2' ? away : null
+          }
+        }
+      } else {
+        // Sin jugar: manda la pick del usuario (quién pasa).
+        const side = advanceSides[m.id]
+        if (side === '1') result = home
+        else if (side === '2') result = away
+        else {
+          // Sin advance_side guardado: derivar de 1/2 (X queda indefinido).
+          const pred = predictions[m.id]
+          if (pred === '1') result = home
+          else if (pred === '2') result = away
+        }
+      }
+    }
+    advancerCache.set(n, result)
+    return result
+  }
+
+  /** Equipo que CAE en el cruce n (el lado que no avanza). */
+  function loser(n: number): ResolvedTeam {
+    const m = byNumber[n]
+    if (!m) return null
+    const adv = advancer(n)
+    if (!adv) return null
+    const home = slot(n, 'home')
+    const away = slot(n, 'away')
+    if (home && adv.name === home.name) return away
+    if (away && adv.name === away.name) return home
+    return null
+  }
+
+  return { slot, advancer, loser }
+}
+
+/** Botón para elegir qué equipo pasa. Declarado fuera del render (no recrear en cada render). */
+function TeamPickButton({ team, selected, disabled, onPick }: {
+  team: ResolvedTeam
+  selected: boolean
+  disabled: boolean
+  onPick: () => void
+}) {
+  const name = team?.name || 'Por clasificar'
+  const flag = team ? getFlagUrl(name) : null
+  return (
+    <button
+      type="button"
+      disabled={disabled || !team}
+      onClick={onPick}
+      className={clsx(
+        'flex-1 py-4 px-3 rounded-lg border text-sm font-semibold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex flex-col items-center gap-2',
+        selected
+          ? 'bg-blue-500 border-blue-500 text-white shadow-sm shadow-blue-500/30'
+          : 'bg-[#0c0d12] border-[#1f2333] text-zinc-300 hover:border-blue-500/30 hover:text-white'
+      )}
+    >
+      {flag && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={flag} alt={name} className="w-8 h-5 object-cover rounded-sm" />
+      )}
+      <span className="text-center leading-tight">{name}</span>
+      <span className={clsx('text-[10px]', selected ? 'opacity-90' : 'opacity-60')}>
+        {selected ? 'Pasa ✓' : 'Pasa'}
+      </span>
+    </button>
+  )
+}
+
 export default function PlayoffsClient({ initialMatches, initialPredictions, porraId, members, currentUserId }: PlayoffsClientProps) {
   const [predictions, setPredictions] = useState<Record<string, MatchResult>>(
     initialPredictions.reduce((acc, p) => ({ ...acc, [p.match_id]: p.prediction }), {})
   )
+  const [advanceSides, setAdvanceSides] = useState<Record<string, AdvanceSide>>(
+    initialPredictions.reduce((acc, p) => (p.advance_side ? { ...acc, [p.match_id]: p.advance_side as AdvanceSide } : acc), {})
+  )
   const [activePredictMatch, setActivePredictMatch] = useState<MatchWithTeams | null>(null)
+  // Estado del modal: lado que avanza + si fue empate a 90' (penaltis)
+  const [modalSide, setModalSide] = useState<AdvanceSide | null>(null)
+  const [modalDraw, setModalDraw] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Ver predicciones de otro miembro de la porra (solo lectura)
   const {
-    viewingUserId, isViewingOther, viewedMember, viewedPredictions,
+    viewingUserId, isViewingOther, viewedMember, viewedPredictions, viewedAdvanceSides,
     loadingMemberId, viewError, viewMember,
   } = useMemberView(porraId, currentUserId, members)
 
-  // Mapa de predicciones que se pinta en el bracket: las propias o las del miembro visto
   const shownPredictions = isViewingOther ? viewedPredictions : predictions
+  const shownAdvanceSides = (isViewingOther ? viewedAdvanceSides : advanceSides) as Record<string, AdvanceSide>
 
-  const treeMatches = initialMatches.filter((m) => m.phase !== 'third_place')
-  const thirdPlaceMatch = initialMatches.find((m) => m.phase === 'third_place')
+  const byNumber: Record<number, MatchWithTeams> = {}
+  for (const m of initialMatches) if (m.match_number != null) byNumber[m.match_number] = m
 
-  const r32 = treeMatches.filter((m) => m.phase === 'round_of_32').sort((a, b) => (a.match_number || 0) - (b.match_number || 0))
-  const r16 = treeMatches.filter((m) => m.phase === 'round_of_16').sort((a, b) => (a.match_number || 0) - (b.match_number || 0))
-  const qf = treeMatches.filter((m) => m.phase === 'quarter_final').sort((a, b) => (a.match_number || 0) - (b.match_number || 0))
-  const sf = treeMatches.filter((m) => m.phase === 'semi_final').sort((a, b) => (a.match_number || 0) - (b.match_number || 0))
-  const final = treeMatches.filter((m) => m.phase === 'final')
+  const resolver = buildResolver(byNumber, shownPredictions, shownAdvanceSides)
 
-  const mappedMatches: any[] = []
+  const thirdPlaceMatch = initialMatches.find((m) => m.phase === 'third_place') || null
 
-  const addPhaseMatches = (matchesList: MatchWithTeams[], phasePrefix: string, roundText: string, nextPhasePrefix?: string) => {
-    matchesList.forEach((match, index) => {
-      const matchIdStr = `${phasePrefix}-${index}`
-      const nextMatchId = nextPhasePrefix ? `${nextPhasePrefix}-${Math.floor(index / 2)}` : null
-      const predictedChoice = shownPredictions[match.id]
-      const isFinished = ['FT', 'AET', 'PEN'].includes(match.status)
-      const isLive = ['1H', 'HT', '2H', 'ET', 'P'].includes(match.status)
+  // Nodos del árbol (todo menos el 3er puesto), ordenados por número de partido.
+  const treeMatches = initialMatches
+    .filter((m) => m.phase !== 'third_place' && m.phase !== 'group')
+    .sort((a, b) => (a.match_number || 0) - (b.match_number || 0))
 
-      mappedMatches.push({
-        id: matchIdStr,
-        name: `M${match.match_number || ''}`,
-        nextMatchId,
-        tournamentRoundText: roundText,
-        state: isFinished ? 'DONE' : isLive ? 'LIVE' : 'SCHEDULED',
-        dbMatch: match,
-        participants: [
-          {
-            id: match.home_team_id || `${matchIdStr}-home`,
-            name: match.home_team?.name || 'Por clasificar',
-            resultText: isFinished ? String(match.home_goals_ft) : null,
-            isWinner: isFinished && match.result_ft === '1',
-          },
-          {
-            id: match.away_team_id || `${matchIdStr}-away`,
-            name: match.away_team?.name || 'Por clasificar',
-            resultText: isFinished ? String(match.away_goals_ft) : null,
-            isWinner: isFinished && match.result_ft === '2',
-          },
-        ],
-        predictedChoice,
-      })
-    })
+  const mappedMatches = treeMatches.map((m) => {
+    const num = m.match_number!
+    const home = resolver.slot(num, 'home')
+    const away = resolver.slot(num, 'away')
+    const isFinished = FINISHED.includes(m.status)
+    const isLive = LIVE.includes(m.status)
+    const nextNum = NEXT_MATCH[num]
+    return {
+      id: String(num),
+      name: `M${num}`,
+      nextMatchId: nextNum ? String(nextNum) : null,
+      tournamentRoundText: ROUND_TEXT[m.phase] ?? '',
+      state: isFinished ? 'DONE' : isLive ? 'LIVE' : 'SCHEDULED',
+      dbMatch: m,
+      resolvedHome: home,
+      resolvedAway: away,
+      participants: [
+        {
+          id: home?.id || `${num}-home`,
+          name: home?.name || 'Por clasificar',
+          resultText: isFinished ? String(m.home_goals_ft ?? '') : null,
+          isWinner: isFinished && m.result_ft === '1',
+        },
+        {
+          id: away?.id || `${num}-away`,
+          name: away?.name || 'Por clasificar',
+          resultText: isFinished ? String(m.away_goals_ft ?? '') : null,
+          isWinner: isFinished && m.result_ft === '2',
+        },
+      ],
+    }
+  })
+
+  // Abrir el modal precargando la pick actual del usuario.
+  const openMatch = (m: MatchWithTeams) => {
+    const pred = predictions[m.id]
+    const adv = advanceSides[m.id]
+    // lado que avanza: el guardado, o derivado de 1/2; X sin advance → null
+    const side: AdvanceSide | null = adv ?? (pred === '1' ? '1' : pred === '2' ? '2' : null)
+    setModalSide(side)
+    setModalDraw(pred === 'X')
+    setError(null)
+    setActivePredictMatch(m)
   }
 
-  addPhaseMatches(r32, 'R32', 'Dieciseisavos', 'R16')
-  addPhaseMatches(r16, 'R16', 'Octavos', 'QF')
-  addPhaseMatches(qf, 'QF', 'Cuartos', 'SF')
-  addPhaseMatches(sf, 'SF', 'Semifinales', 'F')
-  addPhaseMatches(final, 'F', 'Final', undefined)
-
-  const handlePredictSubmit = async (choice: MatchResult) => {
-    if (!activePredictMatch) return
+  const handlePredictSubmit = async () => {
+    if (!activePredictMatch || !modalSide) return
+    const prediction: MatchResult = modalDraw ? 'X' : modalSide
+    const advanceSide = modalSide
     setSaving(true)
     setError(null)
     try {
       const res = await fetch('/api/predictions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matchId: activePredictMatch.id, prediction: choice, porraId }),
+        body: JSON.stringify({ matchId: activePredictMatch.id, prediction, advanceSide, porraId }),
       })
       if (!res.ok) {
         const data = await res.json()
         throw new Error(data.error || 'Error al guardar')
       }
-      setPredictions((prev) => ({ ...prev, [activePredictMatch.id]: choice }))
+      setPredictions((prev) => ({ ...prev, [activePredictMatch.id]: prediction }))
+      setAdvanceSides((prev) => ({ ...prev, [activePredictMatch.id]: advanceSide }))
       setActivePredictMatch(null)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error guardando predicción')
@@ -128,17 +277,18 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
   const CustomMatchNode = ({ match, onMatchClick }: any) => {
     const dbMatch = match.dbMatch as MatchWithTeams
     if (!dbMatch) return null
-    const predicted = shownPredictions[dbMatch.id]
-    const isFinished = ['FT', 'AET', 'PEN'].includes(dbMatch.status)
-    const isLive = ['1H', 'HT', '2H', 'ET', 'P'].includes(dbMatch.status)
+    const pred = shownPredictions[dbMatch.id]
+    const advSide = shownAdvanceSides[dbMatch.id]
+    const isFinished = FINISHED.includes(dbMatch.status)
+    const isLive = LIVE.includes(dbMatch.status)
+    const hasPick = !!pred
 
     return (
       <div
         onClick={() => onMatchClick(dbMatch)}
         className={clsx(
-          'w-full h-full p-2.5 rounded-lg border text-left cursor-pointer transition-all duration-150',
-          'bg-[#13151c]',
-          predicted ? 'border-blue-500/30' : 'border-[#1f2333] hover:border-[#2a2f42]'
+          'w-full h-full p-2.5 rounded-lg border text-left cursor-pointer transition-all duration-150 bg-[#13151c]',
+          hasPick ? 'border-blue-500/30' : 'border-[#1f2333] hover:border-[#2a2f42]'
         )}
       >
         <div className="flex justify-between items-center text-[9px] text-zinc-500 border-b border-[#1f2333] pb-1.5 mb-1.5">
@@ -155,7 +305,8 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
           {[0, 1].map((i) => {
             const teamName = match.participants[i].name
             const flagUrl = getFlagUrl(teamName)
-            const pred = i === 0 ? '1' : '2'
+            const side: AdvanceSide = i === 0 ? '1' : '2'
+            const isPredictedAdvancer = !isFinished && advSide === side
             return (
               <div key={i} className="flex justify-between items-center gap-1 text-xs">
                 <div className="flex items-center gap-1 min-w-0">
@@ -165,7 +316,7 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
                   )}
                   <span className={clsx(
                     'truncate',
-                    predicted === pred ? 'text-blue-400 font-semibold' : 'text-zinc-300',
+                    isPredictedAdvancer ? 'text-blue-400 font-semibold' : 'text-zinc-300',
                     match.participants[i].isWinner ? 'text-white font-bold' : ''
                   )}>
                     {teamName}
@@ -176,11 +327,11 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
             )
           })}
         </div>
-        {predicted && (
+        {hasPick && !isFinished && (
           <div className="mt-1.5 pt-1 border-t border-[#1f2333] text-[9px] flex justify-between">
-            <span className="text-zinc-600">Pred:</span>
+            <span className="text-zinc-600">{pred === 'X' ? 'Empate 90′ + pen.' : 'Pasa'}</span>
             <span className="text-blue-400 font-semibold">
-              {predicted === 'X' ? 'X' : predicted === '1' ? '1' : '2'}
+              {pred === 'X' ? 'X' : pred === '1' ? '1' : '2'}
             </span>
           </div>
         )}
@@ -188,11 +339,19 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
     )
   }
 
+  // Datos del modal
+  const activeNum = activePredictMatch?.match_number ?? null
+  const modalHome = activeNum != null ? resolver.slot(activeNum, 'home') : null
+  const modalAway = activeNum != null ? resolver.slot(activeNum, 'away') : null
   const isMatchLocked = activePredictMatch ? new Date(activePredictMatch.kickoff_at) <= new Date() : false
+  const bothTeamsKnown = !!modalHome && !!modalAway
+
+  // Resolver equipos del 3er puesto para su card
+  const tpHome = thirdPlaceMatch?.match_number != null ? resolver.slot(thirdPlaceMatch.match_number, 'home') : null
+  const tpAway = thirdPlaceMatch?.match_number != null ? resolver.slot(thirdPlaceMatch.match_number, 'away') : null
 
   return (
     <div className="space-y-6">
-      {/* Member viewer */}
       <MemberViewBar
         members={members}
         currentUserId={currentUserId}
@@ -207,13 +366,20 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
         </div>
       )}
 
+      {!isViewingOther && (
+        <div className="px-4 py-3 bg-blue-500/5 border border-blue-500/20 text-blue-300/90 rounded-lg text-xs leading-relaxed">
+          Elige en cada cruce <strong>qué equipo pasa</strong> y se rellenará automáticamente la siguiente ronda — puedes predecir todo el cuadro de una vez.
+          Si crees que será empate a 90′, márcalo: puntúa <strong>X</strong> pero el equipo que elijas seguirá avanzando (penaltis).
+        </div>
+      )}
+
       {/* Bracket */}
       <div className="bg-[#13151c] border border-[#1f2333] rounded-xl p-5">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-base font-semibold text-white">Bracket de eliminatorias</h2>
           <div className="flex items-center gap-3 text-xs text-zinc-500">
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded bg-blue-500" /> Predicho
+              <span className="w-2 h-2 rounded bg-blue-500" /> Tu pick
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded bg-[#1f2333] border border-[#2a2f42]" /> Sin predecir
@@ -226,7 +392,7 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
             <SingleEliminationBracket
               matches={mappedMatches}
               matchComponent={(props: any) => (
-                <CustomMatchNode {...props} onMatchClick={setActivePredictMatch} />
+                <CustomMatchNode {...props} onMatchClick={openMatch} />
               )}
               svgWrapper={({ children, ...props }: any) => (
                 <SVGViewer width={1000} height={600} {...props}>
@@ -254,7 +420,7 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
         <div className="bg-[#13151c] border border-[#1f2333] rounded-xl p-5 max-w-lg">
           <h2 className="text-sm font-semibold text-white mb-3">Tercer y Cuarto Puesto</h2>
           <div
-            onClick={() => setActivePredictMatch(thirdPlaceMatch)}
+            onClick={() => openMatch(thirdPlaceMatch)}
             className={clsx(
               'p-4 rounded-lg border cursor-pointer transition-all',
               shownPredictions[thirdPlaceMatch.id] ? 'border-blue-500/30 bg-blue-500/5' : 'border-[#1f2333] hover:border-[#2a2f42]'
@@ -262,30 +428,30 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
           >
             <div className="flex items-center justify-between text-xs text-zinc-500 mb-3">
               <span>{new Date(thirdPlaceMatch.kickoff_at).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-              {['FT', 'AET', 'PEN'].includes(thirdPlaceMatch.status) ? (
+              {FINISHED.includes(thirdPlaceMatch.status) ? (
                 <span className="text-green-400 font-medium">Finalizado</span>
-              ) : ['1H', 'HT', '2H', 'ET', 'P'].includes(thirdPlaceMatch.status) ? (
+              ) : LIVE.includes(thirdPlaceMatch.status) ? (
                 <span className="text-amber-400 font-medium animate-pulse">En juego</span>
               ) : null}
             </div>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                {thirdPlaceMatch.home_team?.name && getFlagUrl(thirdPlaceMatch.home_team.name) && (
+                {tpHome?.name && getFlagUrl(tpHome.name) && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={getFlagUrl(thirdPlaceMatch.home_team.name)!} alt="" className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
+                  <img src={getFlagUrl(tpHome.name)!} alt="" className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
                 )}
-                <span className="text-sm font-medium text-white">{thirdPlaceMatch.home_team?.name || 'TBD'}</span>
+                <span className="text-sm font-medium text-white">{tpHome?.name || 'Por clasificar'}</span>
               </div>
               <span className="text-sm font-bold text-zinc-400 tabular-nums flex-shrink-0">
-                {['FT', 'AET', 'PEN'].includes(thirdPlaceMatch.status)
+                {FINISHED.includes(thirdPlaceMatch.status)
                   ? `${thirdPlaceMatch.home_goals_ft} – ${thirdPlaceMatch.away_goals_ft}`
                   : 'vs'}
               </span>
               <div className="flex items-center gap-2 justify-end">
-                <span className="text-sm font-medium text-white text-right">{thirdPlaceMatch.away_team?.name || 'TBD'}</span>
-                {thirdPlaceMatch.away_team?.name && getFlagUrl(thirdPlaceMatch.away_team.name) && (
+                <span className="text-sm font-medium text-white text-right">{tpAway?.name || 'Por clasificar'}</span>
+                {tpAway?.name && getFlagUrl(tpAway.name) && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={getFlagUrl(thirdPlaceMatch.away_team.name)!} alt="" className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
+                  <img src={getFlagUrl(tpAway.name)!} alt="" className="w-6 h-4 object-cover rounded-sm flex-shrink-0" />
                 )}
               </div>
             </div>
@@ -321,17 +487,17 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
 
               <p className="text-xs font-medium text-zinc-500 mb-1">{PHASE_NAMES[activePredictMatch.phase]}</p>
               <h3 className="text-base font-semibold text-white mb-1 flex items-center gap-2 flex-wrap">
-                {activePredictMatch.home_team?.name && getFlagUrl(activePredictMatch.home_team.name) && (
+                {modalHome?.name && getFlagUrl(modalHome.name) && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={getFlagUrl(activePredictMatch.home_team.name)!} alt="" className="w-5 h-3.5 object-cover rounded-sm" />
+                  <img src={getFlagUrl(modalHome.name)!} alt="" className="w-5 h-3.5 object-cover rounded-sm" />
                 )}
-                {activePredictMatch.home_team?.name || 'Por clasificar'}
+                {modalHome?.name || 'Por clasificar'}
                 <span className="text-zinc-600 font-normal">vs</span>
-                {activePredictMatch.away_team?.name && getFlagUrl(activePredictMatch.away_team.name) && (
+                {modalAway?.name && getFlagUrl(modalAway.name) && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={getFlagUrl(activePredictMatch.away_team.name)!} alt="" className="w-5 h-3.5 object-cover rounded-sm" />
+                  <img src={getFlagUrl(modalAway.name)!} alt="" className="w-5 h-3.5 object-cover rounded-sm" />
                 )}
-                {activePredictMatch.away_team?.name || 'Por clasificar'}
+                {modalAway?.name || 'Por clasificar'}
               </h3>
               <p className="text-xs text-zinc-500 mb-5">
                 Cierre: {new Date(activePredictMatch.kickoff_at).toLocaleString('es-ES')}
@@ -355,7 +521,7 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
                     <span>
                       Predicción de {viewedMember?.display_name}:{' '}
                       <span className="text-blue-400 font-semibold">
-                        {shownPredictions[activePredictMatch.id] === 'X' ? 'Empate' : shownPredictions[activePredictMatch.id] === '1' ? 'Gana Local' : 'Gana Visitante'}
+                        {shownPredictions[activePredictMatch.id] === 'X' ? 'Empate (90′)' : shownPredictions[activePredictMatch.id] === '1' ? 'Gana Local' : 'Gana Visitante'}
                       </span>
                     </span>
                   ) : (
@@ -364,28 +530,61 @@ export default function PlayoffsClient({ initialMatches, initialPredictions, por
                 </div>
               ) : isMatchLocked ? (
                 <div className="py-4 text-center text-sm text-zinc-500">Predicciones cerradas para este partido.</div>
+              ) : !bothTeamsKnown ? (
+                <div className="py-4 text-center text-sm text-zinc-500">
+                  Completa los cruces anteriores para saber quién juega este partido y poder predecirlo.
+                </div>
               ) : (
-                <div className="grid grid-cols-3 gap-2">
-                  {([['1', 'Local'], ['X', 'Empate'], ['2', 'Visitante']] as [MatchResult, string][]).map(([opt, label]) => (
+                <div className="space-y-4">
+                  <p className="text-xs text-zinc-500">¿Qué equipo pasa?</p>
+                  <div className="flex gap-2">
+                    <TeamPickButton team={modalHome} selected={modalSide === '1'} disabled={saving} onPick={() => setModalSide('1')} />
+                    <TeamPickButton team={modalAway} selected={modalSide === '2'} disabled={saving} onPick={() => setModalSide('2')} />
+                  </div>
+
+                  {activePredictMatch.phase !== 'third_place' && (
                     <button
-                      key={opt}
+                      type="button"
                       disabled={saving}
-                      onClick={() => handlePredictSubmit(opt)}
+                      onClick={() => setModalDraw((d) => !d)}
                       className={clsx(
-                        'py-4 rounded-lg text-sm font-semibold transition-all cursor-pointer disabled:opacity-50 flex flex-col items-center gap-1',
-                        predictions[activePredictMatch.id] === opt
-                          ? 'bg-blue-500 text-white shadow-sm shadow-blue-500/30'
-                          : 'bg-[#0c0d12] border border-[#1f2333] text-zinc-300 hover:border-blue-500/30 hover:text-white'
+                        'w-full flex items-center gap-2.5 p-3 rounded-lg border text-left text-xs transition-all cursor-pointer disabled:opacity-50',
+                        modalDraw
+                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                          : 'bg-[#0c0d12] border-[#1f2333] text-zinc-400 hover:border-[#2a2f42]'
                       )}
                     >
-                      <span className="text-lg font-bold">{opt}</span>
-                      <span className="text-[10px] opacity-75">{label}</span>
+                      <span className={clsx(
+                        'w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border',
+                        modalDraw ? 'bg-amber-500 border-amber-500' : 'border-[#2a2f42]'
+                      )}>
+                        {modalDraw && <Check className="w-3 h-3 text-black" />}
+                      </span>
+                      <span>
+                        Empate a 90′ — pasa en penaltis.{' '}
+                        <span className="opacity-70">Puntúa <strong>X</strong>, el equipo elegido avanza igual.</span>
+                      </span>
                     </button>
-                  ))}
+                  )}
+
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <span className="text-[11px] text-zinc-500">
+                      Puntúa:{' '}
+                      <span className="text-zinc-300 font-semibold">
+                        {!modalSide ? '—' : modalDraw ? 'X (empate 90′)' : modalSide === '1' ? '1 (gana local)' : '2 (gana visitante)'}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      disabled={saving || !modalSide}
+                      onClick={handlePredictSubmit}
+                      className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-500 text-white hover:bg-blue-600 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {saving ? 'Guardando…' : 'Guardar'}
+                    </button>
+                  </div>
                 </div>
               )}
-
-              {saving && <p className="text-center text-xs text-zinc-500 mt-3">Guardando...</p>}
             </motion.div>
           </div>
         )}

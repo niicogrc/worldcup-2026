@@ -2,7 +2,37 @@
 
 ## Qué hace esta pantalla
 
-Muestra el bracket de eliminatorias del Mundial (32avos → octavos → cuartos → semis → final) y permite al usuario predecir el resultado (1-X-2) de cada partido. Incluye también el partido por el tercer puesto.
+Muestra el bracket de eliminatorias del Mundial (32avos → octavos → cuartos → semis → final) y permite al usuario predecir **todo el cuadro en cascada**: en cada cruce eliges qué equipo pasa y ese ganador rellena automáticamente la siguiente ronda, así se puede predecir el cuadro entero de una sentada aunque los equipos de rondas posteriores aún sean TBD. Incluye también el partido por el tercer puesto.
+
+> La **puntuación no cambia**: cada partido real se sigue puntuando por el 1/X/2 a 90'. La cascada es una capa de planificación.
+
+---
+
+## Cascada del cuadro (cómo se rellenan las rondas)
+
+- **R32 (partidos 73–88):** equipos reales (los grupos ya terminaron). Aquí arranca la cascada.
+- **R16 → Final (89–104):** TBD en la DB. Se rellenan con el **ganador predicho** del cruce anterior.
+
+La estructura oficial del cuadro vive en **`lib/playoffs/bracket.ts`** (`BRACKET_SOURCES`, `THIRD_PLACE_SOURCES`, `NEXT_MATCH`). Es por **número de partido**, no por índice: p.ej. R16 #89 = ganador(74) vs ganador(77).
+
+> ⚠️ El bracket antiguo emparejaba con `Math.floor(i/2)` (73-74, 75-76…), que **no** es el cuadro real. `bracket.ts` lo corrige y el árbol que se pasa a `@g-loot/react-tournament-brackets` usa `nextMatchId` derivado de esa tabla.
+
+`buildResolver()` en `playoffs-client.tsx` resuelve cada hueco: equipo real si ya se conoce, si no el ganador predicho del cruce fuente (recursivo, memoizado). Si un cruce fuente ya terminó usa el avance **real** (resultado a 90'; si X, penaltis `home_goals_pen`/`away_goals_pen`).
+
+---
+
+## Quién avanza vs qué puntúa (`predictions.advance_side`)
+
+El modal pide elegir **qué equipo pasa** (mueve la cascada) + un check opcional **"Empate a 90'"**:
+
+| Pick del usuario | `advance_side` (cascada) | `prediction` (puntúa) |
+|---|---|---|
+| Pasa local, sin check | `'1'` | `'1'` |
+| Pasa visitante, sin check | `'2'` | `'2'` |
+| Pasa local, check empate | `'1'` | `'X'` |
+| Pasa visitante, check empate | `'2'` | `'X'` |
+
+`advance_side` (columna nueva, migración `20260109`) se necesita porque cuando `prediction = 'X'` no se puede deducir quién pasa en penaltis. En grupos es NULL. No afecta a los puntos.
 
 ---
 
@@ -39,41 +69,37 @@ page.tsx (servidor)
 
 ## Cómo se construye el bracket
 
-La librería `@g-loot/react-tournament-brackets` espera un array de objetos `matches` con una estructura específica. En `playoffs-client.tsx`, la función `addPhaseMatches()` convierte los datos de la DB a ese formato:
+La librería `@g-loot/react-tournament-brackets` espera un array de objetos `matches` con `nextMatchId`. En `playoffs-client.tsx` se mapea cada partido de eliminatorias (menos el 3er puesto) a un nodo:
 
 ```typescript
-// Cada partido en la DB → un nodo del bracket
 {
-  id: 'R32-0',           // identificador único en el árbol
-  nextMatchId: 'R16-0',  // dónde va el ganador
-  tournamentRoundText: 'Dieciseisavos',
+  id: '89',                       // = match_number como string
+  nextMatchId: '97',             // = NEXT_MATCH[89] (de bracket.ts)
+  tournamentRoundText: 'Octavos',
   state: 'DONE' | 'LIVE' | 'SCHEDULED',
-  dbMatch: match,        // referencia original para UI custom
-  participants: [
-    { id, name, resultText, isWinner },
-    { id, name, resultText, isWinner },
-  ]
+  dbMatch: match,                 // referencia original
+  resolvedHome, resolvedAway,     // equipos resueltos por la cascada
+  participants: [{ id, name, resultText, isWinner }, { ... }],
 }
 ```
 
-El árbol de nextMatchId conecta los partidos entre rondas. El índice determina el emparejamiento: el partido `i` alimenta al partido `Math.floor(i / 2)` de la siguiente ronda.
+`nextMatchId` sale de `NEXT_MATCH` en `lib/playoffs/bracket.ts` (estructura oficial), **no** de `floor(i/2)`. Los `participants` se rellenan con `resolver.slot(num, 'home'|'away')` (cascada).
 
 ---
 
 ## Modal de predicción
 
-Como el bracket es compacto, hacer click en cualquier partido abre un **modal** (Framer Motion) para seleccionar 1/X/2. El estado `activePredictMatch` controla qué modal está abierto.
+Hacer click en un nodo abre un **modal** (Framer Motion). `openMatch(dbMatch)` precarga la pick actual (`modalSide` = lado que avanza, `modalDraw` = empate a 90'). El usuario elige **qué equipo pasa** (botones `TeamPickButton`) y opcionalmente marca "Empate a 90'", luego **Guardar**:
 
 ```typescript
-// Abrir modal al hacer click en un nodo
-setActivePredictMatch(dbMatch)
-
-// Cerrar y guardar
-handlePredictSubmit(choice: MatchResult)
-  → POST /api/predictions
-  → setPredictions(prev => ({ ...prev, [matchId]: choice }))
-  → setActivePredictMatch(null)
+handlePredictSubmit()
+  prediction  = modalDraw ? 'X' : modalSide      // lo que puntúa
+  advanceSide = modalSide                         // lo que mueve la cascada
+  → POST /api/predictions { matchId, prediction, advanceSide, porraId }
+  → setPredictions / setAdvanceSides → la siguiente ronda se recalcula sola
 ```
+
+Si los equipos del cruce aún no están resueltos (faltan picks anteriores), el modal pide completar primero los cruces previos.
 
 ---
 
