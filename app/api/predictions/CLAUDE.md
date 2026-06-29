@@ -14,7 +14,7 @@ Content-Type: application/json
 Body: { matchId: string, prediction: '1' | 'X' | '2', porraId: string, advanceSide?: '1' | '2' }
 ```
 
-`advanceSide` es **opcional** y solo se usa en la cascada del cuadro de playoffs: indica qué lado avanza a la siguiente ronda (`'1'` local, `'2'` visitante). Cuando `prediction = 'X'` (empate a 90') es lo único que dice quién pasa en penaltis. En grupos no se envía (queda NULL). No afecta a los puntos. Ver `app/(app)/playoffs/CLAUDE.md`.
+`advanceSide` es **opcional** y solo se usa en la cascada del cuadro de playoffs: indica qué lado avanza a la siguiente ronda (`'1'` local, `'2'` visitante). En eliminatorias coincide con `prediction` (solo se elige quién pasa, sin empates). En grupos no se envía (queda NULL). No afecta a los puntos. Ver `app/(app)/playoffs/CLAUDE.md`.
 
 Requiere sesión activa (cookie de Supabase en la petición).
 

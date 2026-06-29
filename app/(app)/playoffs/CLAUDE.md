@@ -4,7 +4,7 @@
 
 Muestra el bracket de eliminatorias del Mundial (32avos → octavos → cuartos → semis → final) y permite al usuario predecir **todo el cuadro en cascada**: en cada cruce eliges qué equipo pasa y ese ganador rellena automáticamente la siguiente ronda, así se puede predecir el cuadro entero de una sentada aunque los equipos de rondas posteriores aún sean TBD. Incluye también el partido por el tercer puesto.
 
-> La **puntuación no cambia**: cada partido real se sigue puntuando por el 1/X/2 a 90'. La cascada es una capa de planificación.
+> En eliminatorias **solo se elige quién pasa**: la predicción es ese lado (`'1'` local / `'2'` visitante), no hay opción de empate (`'X'`). El acierto se puntúa contra el resultado a 90' (si el partido acaba en empate a 90' la predicción falla).
 
 ---
 
@@ -21,18 +21,16 @@ La estructura oficial del cuadro vive en **`lib/playoffs/bracket.ts`** (`BRACKET
 
 ---
 
-## Quién avanza vs qué puntúa (`predictions.advance_side`)
+## Quién avanza (`predictions.advance_side`)
 
-El modal pide elegir **qué equipo pasa** (mueve la cascada) + un check opcional **"Empate a 90'"**:
+El modal solo pide elegir **qué equipo pasa**, y esa misma elección es la predicción:
 
 | Pick del usuario | `advance_side` (cascada) | `prediction` (puntúa) |
 |---|---|---|
-| Pasa local, sin check | `'1'` | `'1'` |
-| Pasa visitante, sin check | `'2'` | `'2'` |
-| Pasa local, check empate | `'1'` | `'X'` |
-| Pasa visitante, check empate | `'2'` | `'X'` |
+| Pasa local | `'1'` | `'1'` |
+| Pasa visitante | `'2'` | `'2'` |
 
-`advance_side` (columna nueva, migración `20260109`) se necesita porque cuando `prediction = 'X'` no se puede deducir quién pasa en penaltis. En grupos es NULL. No afecta a los puntos.
+`advance_side` (columna de la migración `20260109`) y `prediction` coinciden siempre en eliminatorias; se mantiene la columna porque el resolutor de la cascada la usa explícitamente (y como fallback deriva de `prediction`). En grupos es NULL. No afecta a los puntos.
 
 ---
 
@@ -89,12 +87,12 @@ La librería `@g-loot/react-tournament-brackets` espera un array de objetos `mat
 
 ## Modal de predicción
 
-Hacer click en un nodo abre un **modal** (Framer Motion). `openMatch(dbMatch)` precarga la pick actual (`modalSide` = lado que avanza, `modalDraw` = empate a 90'). El usuario elige **qué equipo pasa** (botones `TeamPickButton`) y opcionalmente marca "Empate a 90'", luego **Guardar**:
+Hacer click en un nodo abre un **modal** (Framer Motion). `openMatch(dbMatch)` precarga la pick actual (`modalSide` = lado que avanza). El usuario elige **qué equipo pasa** (botones `TeamPickButton`) y pulsa **Guardar**:
 
 ```typescript
 handlePredictSubmit()
-  prediction  = modalDraw ? 'X' : modalSide      // lo que puntúa
-  advanceSide = modalSide                         // lo que mueve la cascada
+  prediction  = modalSide                          // lo que puntúa (= quién pasa)
+  advanceSide = modalSide                           // lo que mueve la cascada
   → POST /api/predictions { matchId, prediction, advanceSide, porraId }
   → setPredictions / setAdvanceSides → la siguiente ronda se recalcula sola
 ```
