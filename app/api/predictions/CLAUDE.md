@@ -11,8 +11,10 @@ Guarda o actualiza la predicción de un usuario para un partido concreto. Es el 
 ```
 POST /api/predictions
 Content-Type: application/json
-Body: { matchId: string, prediction: '1' | 'X' | '2' }
+Body: { matchId: string, prediction: '1' | 'X' | '2', porraId: string, advanceSide?: '1' | '2' }
 ```
+
+`advanceSide` es **opcional** y solo se usa en la cascada del cuadro de playoffs: indica qué lado avanza a la siguiente ronda (`'1'` local, `'2'` visitante). Cuando `prediction = 'X'` (empate a 90') es lo único que dice quién pasa en penaltis. En grupos no se envía (queda NULL). No afecta a los puntos. Ver `app/(app)/playoffs/CLAUDE.md`.
 
 Requiere sesión activa (cookie de Supabase en la petición).
 
@@ -52,12 +54,12 @@ Esta función existe como **guard de seguridad**: si un usuario se registró ant
 
 ```typescript
 supabase.from('predictions').upsert(
-  { user_id, match_id, prediction, is_locked: false },
-  { onConflict: 'user_id,match_id' }
+  { porra_id, user_id, match_id, prediction, advance_side: advanceSide ?? null, is_locked: false },
+  { onConflict: 'porra_id,user_id,match_id' }
 )
 ```
 
-La constraint `UNIQUE (user_id, match_id)` en la DB garantiza que solo hay una predicción por usuario por partido. El upsert la actualiza si ya existe.
+La constraint `UNIQUE (porra_id, user_id, match_id)` en la DB garantiza que solo hay una predicción por usuario por partido por porra. El upsert la actualiza si ya existe.
 
 ---
 

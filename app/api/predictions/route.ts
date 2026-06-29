@@ -21,13 +21,18 @@ export async function POST(req: NextRequest) {
     await ensureProfile(user.id, user.user_metadata as Record<string, string>)
 
     const body = await req.json()
-    const { matchId, prediction, porraId } = body
+    const { matchId, prediction, porraId, advanceSide } = body
 
     if (!matchId || !['1', 'X', '2'].includes(prediction)) {
       return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 })
     }
     if (!porraId) {
       return NextResponse.json({ error: 'Falta el id de la porra' }, { status: 400 })
+    }
+    // advanceSide es opcional (cascada de playoffs): '1' avanza local, '2' visitante.
+    // En grupos no se envía. Si llega, debe ser '1' o '2'.
+    if (advanceSide != null && !['1', '2'].includes(advanceSide)) {
+      return NextResponse.json({ error: 'advanceSide inválido' }, { status: 400 })
     }
 
     // Verify user is member of this porra
@@ -63,6 +68,7 @@ export async function POST(req: NextRequest) {
         user_id: user.id,
         match_id: matchId,
         prediction: prediction,
+        advance_side: advanceSide ?? null,
         is_locked: false
       }, { onConflict: 'porra_id,user_id,match_id' })
 

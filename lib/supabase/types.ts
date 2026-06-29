@@ -300,6 +300,7 @@ export interface Database {
           user_id: string
           match_id: string
           prediction: MatchResult
+          advance_side: '1' | '2' | null
           is_locked: boolean
           is_correct: boolean | null
           points_awarded: number | null
@@ -311,6 +312,7 @@ export interface Database {
           user_id: string
           match_id: string
           prediction: MatchResult
+          advance_side?: '1' | '2' | null
           is_locked?: boolean
           is_correct?: boolean | null
           points_awarded?: number | null
@@ -322,6 +324,7 @@ export interface Database {
           user_id?: string
           match_id?: string
           prediction?: MatchResult
+          advance_side?: '1' | '2' | null
           is_locked?: boolean
           is_correct?: boolean | null
           points_awarded?: number | null
