@@ -27,6 +27,10 @@ body {
 ::-webkit-scrollbar-thumb { background: #1f2333; border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
 
+/* Ocultar scrollbar (tabs de ronda en playoffs) */
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 /* React Tournament Brackets compat */
 .gjGkDS, .sc-dmRaPn, .sc-eCYJuG {
   background-color: transparent !important;

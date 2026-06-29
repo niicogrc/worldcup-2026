@@ -2,7 +2,9 @@
 
 ## Qué hace esta pantalla
 
-Muestra el bracket de eliminatorias del Mundial (32avos → octavos → cuartos → semis → final) y permite al usuario predecir **todo el cuadro en cascada**: en cada cruce eliges qué equipo pasa y ese ganador rellena automáticamente la siguiente ronda, así se puede predecir el cuadro entero de una sentada aunque los equipos de rondas posteriores aún sean TBD. Incluye también el partido por el tercer puesto.
+Permite predecir **todo el cuadro de eliminatorias en cascada**: en cada cruce tocas el equipo que crees que pasa y ese ganador rellena automáticamente la siguiente ronda, así se puede predecir el cuadro entero de una sentada aunque los equipos de rondas posteriores aún sean TBD.
+
+La interfaz principal es **una ronda a la vez** (tabs: Dieciseisavos → Octavos → Cuartos → Semis → Final → 3.º), como **lista de cards** a ancho completo donde tocas el equipo que pasa (sin modal). El **cuadro-árbol** (`@g-loot/react-tournament-brackets`) queda como **vista general de solo lectura colapsable**. Patrón validado por research de UX (ESPN/pick'em, mobile-first): el árbol completo es buen *overview* pero mal medio de *input*.
 
 > En eliminatorias **solo se elige quién pasa**: la predicción es ese lado (`'1'` local / `'2'` visitante), no hay opción de empate (`'X'`). El acierto se puntúa contra el resultado a 90' (si el partido acaba en empate a 90' la predicción falla).
 
@@ -23,7 +25,7 @@ La estructura oficial del cuadro vive en **`lib/playoffs/bracket.ts`** (`BRACKET
 
 ## Quién avanza (`predictions.advance_side`)
 
-El modal solo pide elegir **qué equipo pasa**, y esa misma elección es la predicción:
+Tocar un equipo en su card lo marca como **quién pasa**, y esa misma elección es la predicción:
 
 | Pick del usuario | `advance_side` (cascada) | `prediction` (puntúa) |
 |---|---|---|
@@ -39,7 +41,7 @@ El modal solo pide elegir **qué equipo pasa**, y esa misma elección es la pred
 | Archivo | Tipo | Responsabilidad |
 |---|---|---|
 | `page.tsx` | Server Component | Fetcha partidos de eliminatorias y predicciones del usuario |
-| `playoffs-client.tsx` | Client Component (`"use client"`) | Bracket interactivo, modal de predicción, gestión de estado |
+| `playoffs-client.tsx` | Client Component (`"use client"`) | Tabs por ronda + lista de cards (input), cascada, overview colapsable, estado |
 
 ---
 
@@ -65,55 +67,35 @@ page.tsx (servidor)
 
 ---
 
-## Cómo se construye el bracket
+## Interfaz: tabs por ronda + lista de cards
 
-La librería `@g-loot/react-tournament-brackets` espera un array de objetos `matches` con `nextMatchId`. En `playoffs-client.tsx` se mapea cada partido de eliminatorias (menos el 3er puesto) a un nodo:
-
-```typescript
-{
-  id: '89',                       // = match_number como string
-  nextMatchId: '97',             // = NEXT_MATCH[89] (de bracket.ts)
-  tournamentRoundText: 'Octavos',
-  state: 'DONE' | 'LIVE' | 'SCHEDULED',
-  dbMatch: match,                 // referencia original
-  resolvedHome, resolvedAway,     // equipos resueltos por la cascada
-  participants: [{ id, name, resultText, isWinner }, { ... }],
-}
-```
-
-`nextMatchId` sale de `NEXT_MATCH` en `lib/playoffs/bracket.ts` (estructura oficial), **no** de `floor(i/2)`. Los `participants` se rellenan con `resolver.slot(num, 'home'|'away')` (cascada).
-
----
-
-## Modal de predicción
-
-Hacer click en un nodo abre un **modal** (Framer Motion). `openMatch(dbMatch)` precarga la pick actual (`modalSide` = lado que avanza). El usuario elige **qué equipo pasa** (botones `TeamPickButton`) y pulsa **Guardar**:
+- **Tabs** (`ROUNDS`): una ronda activa (`activeRound`), sticky arriba, con contador `done/total` por ronda. Incluye el 3.er puesto como una ronda más.
+- **Lista**: los partidos de la ronda activa se pintan como `MatchCard` (componente a nivel de módulo). Cada equipo es una fila; tocarla marca quién pasa:
 
 ```typescript
-handlePredictSubmit()
-  prediction  = modalSide                          // lo que puntúa (= quién pasa)
-  advanceSide = modalSide                           // lo que mueve la cascada
-  → POST /api/predictions { matchId, prediction, advanceSide, porraId }
-  → setPredictions / setAdvanceSides → la siguiente ronda se recalcula sola
+pickAdvancer(match, side)               // side = '1' | '2'
+  // optimista: actualiza predictions/advanceSides ya (la cascada se recalcula)
+  → POST /api/predictions { matchId, prediction: side, advanceSide: side, porraId }
+  // si falla, revierte al valor anterior
 ```
 
-Si los equipos del cruce aún no están resueltos (faltan picks anteriores), el modal pide completar primero los cruces previos.
+- **Progreso**: barra + `predichos/total` de la ronda activa.
+- **Siguiente ronda**: botón al final que salta a la ronda siguiente (scroll arriba).
+- Estado por card: `interactive` (editable), `finished`/`live`, `note` ("Completa la ronda anterior", "Cerrado", o el motivo de solo-lectura al ver a otro miembro). Si el cruce aún no tiene los dos equipos resueltos no es editable.
 
 ---
 
-## CustomMatchNode
+## Overview: cuadro completo (solo lectura)
 
-El bracket renderiza cada partido con un componente custom (`CustomMatchNode`) que muestra:
-- Número de partido y fecha
-- Bandera + nombre de cada equipo
-- Resultado si el partido terminó
-- Indicador de la predicción del usuario (resaltado en azul)
+Colapsable ("Ver cuadro completo"). Reusa `@g-loot/react-tournament-brackets` con `mappedMatches`:
 
----
+```typescript
+{ id: '89', nextMatchId: '97' /* = NEXT_MATCH[89] */, participants: [...], dbMatch }
+```
 
-## Partido por el 3er puesto
+`nextMatchId` sale de `NEXT_MATCH` en `lib/playoffs/bracket.ts` (estructura oficial), **no** de `floor(i/2)`. Los `participants` se resuelven con `resolver.slot(num, 'home'|'away')`. El nodo (`OverviewNode`) es de solo lectura; al tocarlo **salta a la ronda** de ese partido (`jumpToRound`) para editarlo en la lista.
 
-`third_place` se trata por separado: no entra en el árbol del bracket (se filtra con `.filter(m => m.phase !== 'third_place')`). Se renderiza en un card independiente debajo del bracket.
+El 3.er puesto no entra en el árbol del overview (se filtra), pero sí aparece como su propia ronda en los tabs.
 
 ---
 
@@ -121,17 +103,15 @@ El bracket renderiza cada partido con un componente custom (`CustomMatchNode`) q
 
 Igual que en grupos: selector `MemberViewBar` + hook `useMemberView` (un fetch a `GET /api/porras/{porraId}/predictions?userId=` por miembro, cacheado). Al ver a otro miembro:
 
-- El bracket y el card del tercer puesto pintan `shownPredictions` (las del miembro visto en vez de las propias).
-- El modal pasa a solo lectura: muestra la predicción del miembro si el partido ya empezó, "oculta hasta el kick-off" si no, o "no hizo predicción".
-- La RLS garantiza que las predicciones de partidos sin empezar nunca llegan al cliente.
+- Las cards y el overview pintan `shownPredictions` / `shownAdvanceSides` (los del miembro visto en vez de los propios).
+- Las cards pasan a solo lectura (`interactive = false`): muestran la pick del miembro si el partido ya empezó, "oculta hasta el kick-off" si no, o "no hizo predicción".
+- La RLS garantiza que las predicciones de partidos sin empezar nunca llegan al cliente (el hook expone además `viewedAdvanceSides`).
 
 ---
 
-## Regla importante: ¿Qué vale empate en eliminatorias?
+## Regla importante: empates en eliminatorias
 
-En eliminatorias, si hay empate a 90 minutos el resultado es **X**, aunque luego haya prórroga o penaltis. El ganador de la eliminatoria en la realidad NO afecta a la predicción de la porra. Solo cuentan los 90 minutos.
-
-Esto se refleja en que `result_ft` siempre se calcula a partir de `home_goals_ft` / `away_goals_ft` (goles a 90'), no del marcador final.
+El `result_ft` del partido se calcula siempre a 90' (`home_goals_ft` / `away_goals_ft`), no del marcador final tras prórroga/penaltis. Como el usuario **solo elige quién pasa** (`'1'`/`'2'`, sin `'X'`), una predicción acierta sólo si `prediction === result_ft`: si el partido acaba **empatado a 90'** (`result_ft = 'X'`) la predicción **falla**, aunque ese equipo pasara en penaltis. La cascada sí usa el avance real (penaltis) para rellenar la siguiente ronda; los puntos no.
 
 ---
 
