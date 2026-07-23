@@ -63,6 +63,21 @@ export default async function HomePage() {
   const firstName = displayName.split(' ')[0]
   const status = getTournamentStatus(new Date())
 
+  let fullLeaderboard: any[] = []
+  if (status.type === 'ended') {
+    const { data: adminProfiles } = await supabase.from('profiles').select('id').eq('role', 'admin')
+    const adminIds = (adminProfiles ?? []).map((p: any) => p.id)
+    let lbQuery = (supabase as any)
+      .from('leaderboard')
+      .select('*')
+      .eq('porra_id', porraId)
+      .order('position', { ascending: true })
+    for (const id of adminIds) lbQuery = lbQuery.neq('user_id', id)
+    const { data } = await lbQuery
+    fullLeaderboard = (data as any[]) ?? []
+  }
+  const champion = fullLeaderboard[0]
+
   const statusConfig = {
     pre:   { icon: Clock,   bg: 'bg-blue-500/10',  border: 'border-blue-500/20',  text: 'text-blue-400',  dot: null },
     live:  { icon: Zap,    bg: 'bg-green-500/10', border: 'border-green-500/20', text: 'text-green-400', dot: true },
@@ -137,6 +152,89 @@ export default async function HomePage() {
           {status.message}
         </div>
       </div>
+
+      {/* Champion celebration */}
+      {status.type === 'ended' && champion && (
+        <div className="space-y-6">
+          <div className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-b from-amber-500/10 via-[#13151c] to-[#13151c] px-6 py-10 text-center">
+            <div className="pointer-events-none absolute inset-0 opacity-40" aria-hidden="true">
+              <span className="absolute left-[8%] top-[15%] text-2xl">🎉</span>
+              <span className="absolute right-[10%] top-[20%] text-2xl">🎊</span>
+              <span className="absolute left-[15%] bottom-[12%] text-xl">⚽</span>
+              <span className="absolute right-[15%] bottom-[18%] text-xl">🎉</span>
+              <span className="absolute left-[45%] top-[8%] text-lg">✨</span>
+              <span className="absolute right-[40%] bottom-[10%] text-lg">✨</span>
+            </div>
+
+            <p className="text-sm font-semibold uppercase tracking-widest text-amber-400">🏆 Campeón de la porra</p>
+
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={champion.avatar_url || `https://api.dicebear.com/7.x/thumbs/svg?seed=${champion.display_name}&backgroundColor=1f2333`}
+              alt={champion.display_name}
+              className="mx-auto mt-5 h-28 w-28 rounded-full ring-4 ring-amber-400/40 bg-[#1f2333]"
+            />
+
+            <h2 className="mt-4 text-3xl font-bold text-white">{champion.display_name}</h2>
+            <p className="mt-1 text-amber-300 font-medium tabular-nums">{champion.total_points} puntos</p>
+            <p className="mt-3 text-sm text-zinc-400">Se proclama campeón del Mundial 2026 🥇</p>
+          </div>
+
+          {/* Leaderboard general */}
+          <div className="bg-[#13151c] border border-[#1f2333] rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#1f2333]">
+              <h3 className="text-base font-semibold text-white">Clasificación final</h3>
+              <p className="text-xs text-zinc-500 mt-0.5">Ranking general de la porra</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs font-medium text-zinc-500 border-b border-[#1f2333]">
+                    <th className="py-3 px-5 text-center w-14">Pos</th>
+                    <th className="py-3 px-4 text-left">Jugador</th>
+                    <th className="py-3 px-5 text-center font-semibold text-zinc-300">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fullLeaderboard.map((row) => {
+                    const isMe = row.user_id === user.id
+                    const medal: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' }
+                    return (
+                      <tr
+                        key={row.user_id}
+                        className={clsx('border-b border-[#1f2333] last:border-0', isMe ? 'bg-blue-500/5' : '')}
+                      >
+                        <td className="py-3 px-5 text-center">
+                          {medal[row.position] ? (
+                            <span className="text-lg">{medal[row.position]}</span>
+                          ) : (
+                            <span className={clsx('text-sm tabular-nums', isMe ? 'text-blue-400 font-bold' : 'text-zinc-400')}>{row.position}</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2.5">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={row.avatar_url || `https://api.dicebear.com/7.x/thumbs/svg?seed=${row.display_name}&backgroundColor=1f2333`}
+                              alt={row.display_name}
+                              className={clsx('w-8 h-8 rounded-full bg-[#1f2333] flex-shrink-0', isMe ? 'ring-1 ring-blue-400' : '')}
+                            />
+                            <span className={clsx('text-sm font-medium', isMe ? 'text-blue-400' : 'text-white')}>{row.display_name}</span>
+                            {isMe && <span className="text-[10px] bg-blue-500/15 text-blue-400 px-1.5 py-0.5 rounded font-medium">Tú</span>}
+                          </div>
+                        </td>
+                        <td className={clsx('py-3 px-5 text-center text-lg font-bold tabular-nums', isMe ? 'text-blue-400' : 'text-white')}>
+                          {row.total_points}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3">
